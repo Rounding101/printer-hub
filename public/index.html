@@ -27,23 +27,35 @@
 
   <section class="view page" data-view="library" hidden>
     <div class="dropzone" id="lib-drop">
-      <p><strong>Drop print files here</strong> or
-        <label class="link-btn">browse<input type="file" id="lib-input" accept=".gcode,.gx,.3mf,.bgcode" multiple hidden></label>
+      <p><strong>Drop files here</strong> or
+        <label class="link-btn">browse<input type="file" id="lib-input" accept=".gcode,.gx,.3mf,.bgcode,.stl,.obj,.step,.stp,.amf" multiple hidden></label>
       </p>
-      <p class="dlg-hint">.gcode, .gx, .3mf or .bgcode, up to 512 MB. Files are stored on the hub so you can send them to any printer later.</p>
+      <p class="dlg-hint">Print files (.gcode, .gx, .bgcode, sliced .3mf) or models to slice (.stl, .obj, .step, .3mf projects), up to 512 MB each.</p>
       <div class="progress" id="lib-progress" hidden><div class="progress-fill"></div><span class="progress-text"></span></div>
     </div>
     <div class="toolbar">
+      <div class="seg" role="tablist" aria-label="Library section">
+        <button type="button" role="tab" data-lib="print" aria-selected="true">Print files <span class="count" id="lib-count-print"></span></button>
+        <button type="button" role="tab" data-lib="model" aria-selected="false">Models <span class="count" id="lib-count-model"></span></button>
+      </div>
       <label class="grow">Search
         <input id="lib-search" type="search" placeholder="File name or printer model">
       </label>
+      <p class="slicer-status" id="slicer-status"></p>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" data-lib-panel="print">
       <table class="table">
         <thead><tr><th>File</th><th>Sliced for</th><th class="num">Size</th><th></th></tr></thead>
         <tbody id="lib-body"></tbody>
       </table>
-      <p class="table-empty" id="lib-empty">No files yet. Drop some above, or upload one from a printer's Start print dialog.</p>
+      <p class="table-empty" id="lib-empty">No print files yet. Drop some above, slice a model, or upload from a printer's Start print dialog.</p>
+    </div>
+    <div class="table-wrap" data-lib-panel="model" hidden>
+      <table class="table">
+        <thead><tr><th>Model</th><th>Sliced versions</th><th class="num">Size</th><th></th></tr></thead>
+        <tbody id="model-body"></tbody>
+      </table>
+      <p class="table-empty" id="model-empty">No models yet. Drop .stl, .obj, .step or .3mf files above.</p>
     </div>
   </section>
 
@@ -141,7 +153,7 @@
       <h3>Files on <span class="dlg-name"></span></h3>
       <div class="upload-row">
         <label class="btn primary file-pick">Upload from computer…
-          <input type="file" class="upload-input" accept=".gcode,.gx,.3mf,.bgcode" hidden>
+          <input type="file" class="upload-input" accept=".gcode,.gx,.3mf,.bgcode,.stl,.obj,.step,.stp,.amf" hidden>
         </label>
         <label class="check"><input type="checkbox" class="upload-print" checked> Print after upload</label>
       </div>
@@ -202,7 +214,53 @@
     </form>
   </dialog>
 
+  <dialog id="slice-dlg">
+    <form method="dialog" class="dlg form">
+      <h3>Slice <span class="sd-model"></span></h3>
+      <div class="sd-fields">
+        <label>Printer <select name="printerId"></select></label>
+        <label>Quality <select name="process"></select></label>
+        <label>Filament <select name="filament"></select></label>
+        <div class="form-row">
+          <label>Copies on the plate <input name="copies" type="number" min="1" max="64" value="1"></label>
+          <label>Infill <span class="sd-infill-val"></span><input name="infill" type="range" min="0" max="100" step="5" value="15"></label>
+        </div>
+        <div class="form-row">
+          <label>Supports
+            <select name="supports">
+              <option value="off">Off</option>
+              <option value="normal">Normal (auto)</option>
+              <option value="tree">Tree (auto)</option>
+            </select>
+          </label>
+          <label>Walls <input name="walls" type="number" min="1" max="10" value="2"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="brim"> Brim</label>
+        <label class="check"><input type="checkbox" name="orient"> Auto-orient the model</label>
+      </div>
+      <div class="sd-status" hidden></div>
+      <div class="dlg-actions">
+        <button class="btn ghost sd-close" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary sd-go" type="button">Slice</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="preview-dlg">
+    <form method="dialog" class="dlg">
+      <h3 class="pv-title"></h3>
+      <div class="pv-stage"><canvas class="pv-canvas"></canvas><p class="pv-msg dlg-hint"></p></div>
+      <p class="dlg-hint pv-dims"></p>
+      <div class="dlg-actions"><button class="btn ghost" value="close">Close</button></div>
+    </form>
+  </dialog>
+
   <div id="toasts" class="toasts" role="status"></div>
+
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
+  <script type="module" src="/preview.js"></script>
 
   <script src="/vendor/mpegts.js"></script>
   <script src="/jobs.js"></script>

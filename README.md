@@ -106,6 +106,32 @@ Kobra X uploads and starts follow the format validated on firmware 2.0.2.2
 by [kobra-lan-cli](https://github.com/eduardobittencourt/kobra-lan-cli). The
 printer must be idle to receive files.
 
+## Models and slicing
+
+- **Library → Models:** drop `.stl`, `.obj`, `.step`/`.stp`, `.amf` or a
+  `.3mf` project. A `.3mf` that already contains sliced plates goes to Print
+  files instead. STL, OBJ and 3MF models get a 3D **Preview** with dimensions.
+- **Slice…** runs [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)
+  (2.4.2 by default) in the `slicer` container, using Orca's own 0.4 mm presets:
+  - AD5M: `Flashforge Adventurer 5M 0.4 Nozzle`, with 0.12 Fine, 0.20 Standard or
+    0.24 Draft quality and all Flashforge AD5M filaments.
+  - Kobra X: `Anycubic Kobra X 0.4 nozzle`, with 0.08–0.28 mm quality and the
+    Anycubic Kobra X filaments.
+
+  You can set copies on the plate (they're auto-arranged), infill, supports
+  (off, normal or tree), walls, brim and auto-orient. The dialog remembers your
+  last choices for each printer.
+- The result lands in Print files, linked to its model. The copy count becomes
+  the job's **items per plate**, so 4 copies counts as 4 items in Totals.
+  **Send & print…** goes straight to the print dialog.
+- Kobra X slices get a `; paint_info` header line (Anycubic Slicer Next writes
+  one; Orca doesn't), so the printer can report the file's color for slot mapping.
+- The slicer flattens Orca's `inherits` chains into standalone presets and fixes
+  one Kobra X profile value the command-line tool rejects (cut retraction 0,
+  while that feature is off). Set a different Orca version with
+  `ORCA_VERSION` in the stack env.
+- Multi-color painting and placing parts by hand still need a desktop slicer.
+
 ## Job log and totals
 
 While the hub is running, it logs every print by itself: start, finish and

@@ -64,8 +64,83 @@ library.on('change', (items) => broadcast('library', items));
 
 // Sends a library file to a printer's own storage.
 async function sendToPrinter(item, printer) {
+  if (item.kind === 'model') throw new Error(`${item.name} is a model; slice it first`);
   await printer.upload(item.name, library.read(item.id));
   library.markSent(item.id, printer.state.id);
+}
+
+// New jobs default their item count to the number of copies the hub sliced.
+jobs.quantityHint = (file) => library.findByName(file)?.copies ?? null;
+
+// ---- Slicer service (OrcaSlicer CLI in its own container) ---------------------
+
+const SLICER_URL = process.env.SLICER_URL || config.slicerUrl || null;
+// Orca vendor/machine presets per printer type; a printer can override with "slicer".
+const SLICER_DEFAULTS = {
+  anycubic: { vendor: 'Anycubic', machine: 'Anycubic Kobra X 0.4 nozzle' },
+  flashforge: { vendor: 'Flashforge', machine: 'Flashforge Adventurer 5M 0.4 Nozzle' },
+};
+const slicerProfileFor = (p) => p.cfg.slicer || SLICER_DEFAULTS[p.cfg.type] || null;
+
+async function slicerCall(pathname, body, timeoutMs = 10000) {
+  if (!SLICER_URL) throw new Error('No slicer service configured');
+  const res = await fetch(new URL(pathname, SLICER_URL), {
+    method: body ? 'POST' : 'GET',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Slicer error ${res.status}`);
+  return data;
+}
+
+let slicerStatus = { available: false, checkedAt: 0 };
+async function slicerHealth() {
+  if (!SLICER_URL) return { available: false };
+  if (Date.now() - slicerStatus.checkedAt < 30000) return slicerStatus;
+  try {
+    const h = await slicerCall('/health', null, 3000);
+    slicerStatus = { available: true, version: h.version, busy: h.busy, checkedAt: Date.now() };
+  } catch (err) {
+    slicerStatus = { available: false, error: err.message, checkedAt: Date.now() };
+  }
+  return slicerStatus;
+}
+
+const tag = (s) => String(s).replace(/[^A-Za-z0-9.+-]+/g, '_').replace(/^_+|_+$/g, '');
+
+async function sliceModel(item, printer, body) {
+  const profile = slicerProfileFor(printer);
+  if (!profile) throw new Error(`No slicer profile for ${printer.state.name}`);
+  const copies = Math.max(1, Math.min(64, Math.round(Number(body.copies) || 1)));
+  const result = await slicerCall('/slice', {
+    input: library.filePath(item),
+    vendor: profile.vendor,
+    machine: profile.machine,
+    process: body.process,
+    filament: body.filament,
+    copies,
+    orient: !!body.orient,
+    options: body.options || {},
+    paintInfo: printer.cfg.type === 'anycubic',
+  }, 25 * 60 * 1000);
+  try {
+    const layer = (/^(\d+\.\d+mm)/.exec(body.process || '') || [])[1] || 'custom';
+    const material = tag((result.stats.material || 'PLA').split(';')[0]);
+    const base = tag(item.name.replace(/\.[^.]+$/, ''));
+    const name = `${base}_${tag(printer.state.id)}_${layer}_${material}${copies > 1 ? `_x${copies}` : ''}.gcode`;
+    return await library.addFromStream(name, fs.createReadStream(result.output), {
+      modelId: item.id,
+      copies,
+      slicedFor: printer.state.id,
+      sliceSettings: { process: body.process, filament: body.filament, options: body.options || {} },
+      grams: result.stats.grams,
+      estimate: result.stats.time,
+    });
+  } finally {
+    slicerCall('/cleanup', { id: result.id }).catch(() => {});
+  }
 }
 
 // ---- HTTP helpers ------------------------------------------------------------
@@ -109,6 +184,7 @@ const STATIC = {
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/jobs.js': ['public/jobs.js', 'text/javascript; charset=utf-8'],
   '/files.js': ['public/files.js', 'text/javascript; charset=utf-8'],
+  '/preview.js': ['public/preview.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
   '/vendor/mpegts.js': ['node_modules/mpegts.js/dist/mpegts.js', 'text/javascript; charset=utf-8'],
 };
@@ -129,6 +205,19 @@ const ACTIONS = {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const parts = url.pathname.split('/').filter(Boolean);
+
+  // three.js for the model preview: /vendor/three/three.module.js and /vendor/three/addons/...
+  if (req.method === 'GET' && url.pathname.startsWith('/vendor/three/')) {
+    const rel = url.pathname.slice('/vendor/three/'.length);
+    const root = rel.startsWith('addons/') ? path.join(__dirname, 'node_modules/three/examples/jsm') : path.join(__dirname, 'node_modules/three/build');
+    const file = path.resolve(root, rel.replace(/^addons\//, ''));
+    if (!file.startsWith(root + path.sep) || !file.endsWith('.js')) return json(res, 404, { error: 'Not found' });
+    return fs.readFile(file, (err, buf) => {
+      if (err) return json(res, 404, { error: 'Not found' });
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400' });
+      res.end(buf);
+    });
+  }
 
   if (req.method === 'GET' && STATIC[url.pathname]) {
     const [file, type] = STATIC[url.pathname];
@@ -176,7 +265,28 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // /api/library, /api/library/:id[/download|/send]
+  // /api/slicer, /api/slicer/profiles?printerId=
+  if (parts[1] === 'slicer') {
+    try {
+      if (!parts[2]) {
+        const h = await slicerHealth();
+        const supported = [...printers.values()].filter((p) => slicerProfileFor(p)).map((p) => p.state.id);
+        return json(res, 200, { available: h.available, version: h.version || null, error: h.error || null, printers: supported });
+      }
+      if (parts[2] === 'profiles') {
+        const p = printers.get(url.searchParams.get('printerId'));
+        if (!p) throw new Error('Unknown printer');
+        const profile = slicerProfileFor(p);
+        if (!profile) throw new Error(`No slicer profile for ${p.state.name}`);
+        return json(res, 200, await slicerCall(`/profiles?vendor=${encodeURIComponent(profile.vendor)}&machine=${encodeURIComponent(profile.machine)}`));
+      }
+      return json(res, 404, { error: 'Not found' });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
+  // /api/library, /api/library/:id[/download|/send|/slice]
   if (parts[1] === 'library') {
     try {
       if (!parts[2] && req.method === 'GET') return json(res, 200, library.list());
@@ -191,6 +301,13 @@ const server = http.createServer(async (req, res) => {
           'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(item.name)}`,
         });
         return fs.createReadStream(library.filePath(item)).pipe(res);
+      }
+      if (parts[3] === 'slice' && req.method === 'POST') {
+        const body = await readBody(req);
+        const p = printers.get(body.printerId);
+        if (!p) throw new Error('Unknown printer');
+        if (item.kind !== 'model') throw new Error('Only models can be sliced');
+        return json(res, 200, await sliceModel(item, p, body));
       }
       if (parts[3] === 'send' && req.method === 'POST') {
         const body = await readBody(req);
@@ -225,6 +342,7 @@ const server = http.createServer(async (req, res) => {
     // Upload from the browser: kept in the library, then sent to the printer.
     if (req.method === 'POST' && resource === 'upload') {
       const item = await library.addFromStream(url.searchParams.get('name'), req);
+      if (item.kind === 'model') return json(res, 200, { ok: true, model: true, file: item.name, libraryId: item.id });
       try {
         await sendToPrinter(item, printer);
       } catch (err) {

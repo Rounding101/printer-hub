@@ -2,7 +2,9 @@
   "port": 3000,
   "pollIntervalMs": 1000,
   "printers": [
-    { "id": "ad5m", "name": "Adventurer 5M (demo)", "type": "mock", "startPrinting": true },
-    { "id": "kobrax", "name": "Kobra X (demo)", "type": "mock", "startPrinting": false, "multiColor": true }
+    { "id": "ad5m", "name": "Adventurer 5M (demo)", "type": "mock", "startPrinting": true,
+      "slicer": { "vendor": "Flashforge", "machine": "Flashforge Adventurer 5M 0.4 Nozzle" } },
+    { "id": "kobrax", "name": "Kobra X (demo)", "type": "mock", "startPrinting": false, "multiColor": true,
+      "slicer": { "vendor": "Anycubic", "machine": "Anycubic Kobra X 0.4 nozzle" } }
   ]
 }

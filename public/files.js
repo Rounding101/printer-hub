@@ -86,6 +86,15 @@ const Files = (() => {
     const printerId = filesFor;
     try {
       const res = await upload(`/api/printers/${enc(printerId)}/upload?name=${enc(file.name)}`, file, dlg.querySelector('.progress'));
+      if (res.model) {
+        // Models can't be printed directly: slice for this printer first.
+        dlg.close();
+        const item = library.find((i) => i.id === res.libraryId) || { id: res.libraryId, name: res.file };
+        lastSlice.printerId = printerId;
+        toast(`${res.file} is a model. Saved to the library; slice it to print.`);
+        if (slicer.available) openSlice(item);
+        return;
+      }
       toast(`Sent ${res.file} to ${printerName(printerId)}`);
       if (dlg.querySelector('.upload-print').checked) {
         dlg.close();
@@ -215,7 +224,12 @@ const Files = (() => {
     const body = $('lib-body');
     if (!body) return;
     const q = $('lib-search').value.trim().toLowerCase();
-    const items = library.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.printerModel || '').toLowerCase().includes(q));
+    const prints = library.filter((i) => i.kind !== 'model');
+    const models = library.filter((i) => i.kind === 'model');
+    $('lib-count-print').textContent = prints.length || '';
+    $('lib-count-model').textContent = models.length || '';
+    renderModels(models.filter((i) => !q || i.name.toLowerCase().includes(q)));
+    const items = prints.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.printerModel || '').toLowerCase().includes(q));
     const printers = [...cards.values()].map((c) => c.state);
     body.replaceChildren(...items.map((i) => {
       const tr = document.createElement('tr');
@@ -224,11 +238,20 @@ const Files = (() => {
       name.title = [i.name, i.slicer && `Sliced with ${i.slicer}`, i.material, i.estimate && `Est. ${i.estimate}`].filter(Boolean).join('\n');
       const added = new Date(i.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const sent = (i.sentTo || []).map(printerName).join(', ');
+      const model = i.modelId && library.find((m) => m.id === i.modelId);
       name.append(
         Object.assign(document.createElement('span'), { className: 'lib-name', textContent: i.name }),
-        Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [`Added ${added}`, i.material, sent && `On ${sent}`].filter(Boolean).join(' · ') }),
+        Object.assign(document.createElement('span'), {
+          className: 'lib-sub',
+          textContent: [
+            model ? `Sliced from ${model.name}` : `Added ${added}`,
+            i.copies > 1 && `${i.copies} copies`,
+            i.material, i.grams && `${Math.round(i.grams)} g`, i.estimate,
+            sent && `On ${sent}`,
+          ].filter(Boolean).join(' · '),
+        }),
       );
-      td(i.printerModel || '—', 'nowrap');
+      td(i.printerModel || (i.slicedFor ? printerName(i.slicedFor) : '—'), 'nowrap');
       td(size(i.size), 'num nowrap');
 
       const actions = document.createElement('td');
@@ -280,11 +303,180 @@ const Files = (() => {
     $('lib-empty').hidden = items.length > 0;
   }
 
+  // ---- Models -------------------------------------------------------------------
+
+  let slicer = { available: false, printers: [] };
+
+  async function refreshSlicer() {
+    try { slicer = await api('/api/slicer'); } catch { slicer = { available: false, printers: [] }; }
+    const el = $('slicer-status');
+    const v = slicer.version && slicer.version !== 'unknown' ? ` ${slicer.version}` : '';
+    el.textContent = slicer.available ? `Slicer ready · OrcaSlicer${v}` : 'Slicer offline';
+    el.classList.toggle('off', !slicer.available);
+    el.title = slicer.error || '';
+    renderLibrary();
+  }
+
+  function renderModels(models) {
+    const body = $('model-body');
+    body.replaceChildren(...models.map((m) => {
+      const tr = document.createElement('tr');
+      const slices = library.filter((i) => i.modelId === m.id);
+      const name = document.createElement('td');
+      name.className = 'item lib-item';
+      name.append(
+        Object.assign(document.createElement('span'), { className: 'lib-name', textContent: m.name }),
+        Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: `Added ${new Date(m.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` }),
+      );
+      const sl = document.createElement('td');
+      sl.className = 'nowrap';
+      sl.textContent = slices.length
+        ? [...new Set(slices.map((s) => printerName(s.slicedFor)))].map((p) => `${p} (${slices.filter((s) => printerName(s.slicedFor) === p).length})`).join(', ')
+        : '—';
+      const sz = Object.assign(document.createElement('td'), { className: 'num nowrap', textContent: size(m.size) });
+      const actions = document.createElement('td');
+      actions.className = 'actions';
+      const wrap = document.createElement('div');
+      wrap.className = 'row-actions';
+      if (window.Preview?.supports(m.name)) {
+        const pv = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Preview' });
+        pv.onclick = () => window.Preview.open(m);
+        wrap.append(pv);
+      }
+      const go = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small primary', textContent: 'Slice…' });
+      go.disabled = !slicer.available;
+      go.title = slicer.available ? '' : 'The slicer service is not running';
+      go.onclick = () => openSlice(m);
+      const dl = Object.assign(document.createElement('a'), { className: 'btn small ghost icon', textContent: '⤓', title: 'Download', href: `/api/library/${enc(m.id)}/download` });
+      const del = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small ghost icon', textContent: '✕', title: 'Delete model' });
+      del.onclick = async () => {
+        if (!confirm(`Delete ${m.name}? Its sliced print files stay in the library.`)) return;
+        try { await api(`/api/library/${enc(m.id)}`, { method: 'DELETE' }); } catch (err) { toast(err.message, true); }
+      };
+      wrap.append(go, dl, del);
+      actions.append(wrap);
+      tr.append(name, sl, sz, actions);
+      return tr;
+    }));
+    $('model-empty').hidden = models.length > 0;
+  }
+
+  function showLibPanel(kind) {
+    document.querySelectorAll('[data-lib]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.lib === kind)));
+    document.querySelectorAll('[data-lib-panel]').forEach((p) => { p.hidden = p.dataset.libPanel !== kind; });
+    try { localStorage.setItem('libPanel', kind); } catch { /* storage unavailable */ }
+  }
+
+  // ---- Slice dialog ---------------------------------------------------------------
+
+  const lastSlice = (() => { try { return JSON.parse(localStorage.getItem('lastSlice') || '{}'); } catch { return {}; } })();
+
+  async function openSlice(model) {
+    const dlg = $('slice-dlg');
+    const f = dlg.querySelector('form');
+    const status = dlg.querySelector('.sd-status');
+    const go = dlg.querySelector('.sd-go');
+    dlg.querySelector('.sd-model').textContent = model.name;
+    dlg.querySelector('.sd-fields').hidden = false;
+    status.hidden = true;
+    go.hidden = false;
+    go.disabled = false;
+    go.textContent = 'Slice';
+    dlg.querySelector('.sd-close').textContent = 'Cancel';
+
+    const printers = [...cards.values()].map((c) => c.state).filter((p) => slicer.printers.includes(p.id));
+    f.printerId.replaceChildren(...printers.map((p) => new Option(p.name, p.id)));
+    if (lastSlice.printerId && printers.some((p) => p.id === lastSlice.printerId)) f.printerId.value = lastSlice.printerId;
+    f.copies.value = lastSlice.copies || 1;
+    f.infill.value = lastSlice.infill ?? 15;
+    f.supports.value = lastSlice.supports || 'off';
+    f.walls.value = lastSlice.walls || 2;
+    f.brim.checked = !!lastSlice.brim;
+    f.orient.checked = !!lastSlice.orient;
+    const infillLabel = () => { dlg.querySelector('.sd-infill-val').textContent = `${f.infill.value}%`; };
+    f.infill.oninput = infillLabel;
+    infillLabel();
+
+    const loadProfiles = async () => {
+      f.process.replaceChildren(new Option('Loading…', ''));
+      f.filament.replaceChildren(new Option('Loading…', ''));
+      try {
+        const pr = await api(`/api/slicer/profiles?printerId=${enc(f.printerId.value)}`);
+        const pick = (sel, names, def, remembered) => {
+          sel.replaceChildren(...names.map((n) => new Option(n.replace(/ @.*$/, ''), n)));
+          sel.value = names.includes(remembered) ? remembered : def;
+        };
+        const mem = lastSlice.byPrinter?.[f.printerId.value] || {};
+        pick(f.process, pr.processes, pr.defaults.process, mem.process);
+        pick(f.filament, pr.filaments, pr.defaults.filament, mem.filament);
+      } catch (err) {
+        f.process.replaceChildren(new Option(err.message, ''));
+        f.filament.replaceChildren();
+      }
+    };
+    f.printerId.onchange = loadProfiles;
+    dlg.showModal();
+    await loadProfiles();
+
+    go.onclick = async () => {
+      if (!f.process.value || !f.filament.value) return;
+      const printerId = f.printerId.value;
+      const body = {
+        printerId,
+        process: f.process.value,
+        filament: f.filament.value,
+        copies: Number(f.copies.value) || 1,
+        orient: f.orient.checked,
+        options: { infill: Number(f.infill.value), supports: f.supports.value, brim: f.brim.checked, walls: Number(f.walls.value) || 2 },
+      };
+      Object.assign(lastSlice, { printerId, copies: body.copies, infill: body.options.infill, supports: body.options.supports, brim: body.options.brim, walls: body.options.walls, orient: body.orient });
+      lastSlice.byPrinter = { ...(lastSlice.byPrinter || {}), [printerId]: { process: body.process, filament: body.filament } };
+      try { localStorage.setItem('lastSlice', JSON.stringify(lastSlice)); } catch { /* storage unavailable */ }
+
+      go.disabled = true;
+      go.textContent = 'Slicing…';
+      status.hidden = false;
+      status.className = 'sd-status';
+      status.textContent = `Slicing ${body.copies > 1 ? `${body.copies} copies ` : ''}for ${printerName(printerId)}. Large models can take a few minutes.`;
+      try {
+        const item = await api(`/api/library/${enc(model.id)}/slice`, { body });
+        dlg.querySelector('.sd-fields').hidden = true;
+        status.className = 'sd-status ok';
+        status.replaceChildren(
+          Object.assign(document.createElement('strong'), { textContent: 'Sliced' }),
+          document.createTextNode(` ${[item.estimate, item.grams && `${Math.round(item.grams)} g`, `${item.copies} ${item.copies === 1 ? 'copy' : 'copies'}`].filter(Boolean).join(' · ')}`),
+          Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: item.name }),
+        );
+        go.hidden = true;
+        dlg.querySelector('.sd-close').textContent = 'Done';
+        const print = Object.assign(document.createElement('button'), { type: 'button', className: 'btn primary', textContent: 'Send & print…' });
+        const p = cards.get(printerId)?.state;
+        print.disabled = !canPrint(p);
+        print.title = p && !canPrint(p) ? `${p.name} is ${p.online ? p.status : 'offline'}` : '';
+        print.onclick = async () => {
+          print.disabled = true;
+          try {
+            await sendFromLibrary(item.id, printerId);
+            dlg.close();
+            openPrint(printerId, item.name);
+          } catch (err) { toast(err.message, true); print.disabled = false; }
+        };
+        status.append(print);
+      } catch (err) {
+        status.className = 'sd-status bad';
+        status.textContent = err.message;
+        go.disabled = false;
+        go.textContent = 'Slice';
+      }
+    };
+  }
+
   async function addToLibrary(fileList) {
     for (const file of fileList) {
       try {
-        await upload(`/api/library?name=${enc(file.name)}`, file, $('lib-progress'));
-        toast(`Saved ${file.name} to the library`);
+        const item = await upload(`/api/library?name=${enc(file.name)}`, file, $('lib-progress'));
+        toast(`Saved ${file.name} to ${item.kind === 'model' ? 'Models' : 'Print files'}`);
+        showLibPanel(item.kind === 'model' ? 'model' : 'print');
       } catch (err) { toast(`${file.name}: ${err.message}`, true); }
     }
   }
@@ -305,6 +497,13 @@ const Files = (() => {
     });
     fdlg.querySelector('.file-filter').addEventListener('input', filterPrinterFiles);
     fdlg.querySelector('.lib-link').addEventListener('click', () => fdlg.close());
+
+    document.querySelectorAll('[data-lib]').forEach((b) => b.addEventListener('click', () => showLibPanel(b.dataset.lib)));
+    let saved = 'print';
+    try { saved = localStorage.getItem('libPanel') || 'print'; } catch { /* storage unavailable */ }
+    showLibPanel(saved);
+    refreshSlicer();
+    setInterval(refreshSlicer, 60000);
   }
 
   document.addEventListener('DOMContentLoaded', initLibrary);

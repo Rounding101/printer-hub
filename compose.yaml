@@ -12,6 +12,23 @@ services:
       AD5M_SERIAL: ${AD5M_SERIAL:-}
       AD5M_CHECK_CODE: ${AD5M_CHECK_CODE:-}
       KOBRAX_HOST: ${KOBRAX_HOST:?set KOBRAX_HOST}
+      SLICER_URL: http://slicer:8080
+      TZ: ${TZ:-UTC}
+    volumes:
+      - printer-hub-data:/data
+
+  # OrcaSlicer CLI behind a small HTTP API. Shares /data with the hub so model
+  # and G-code files are passed by path. Not exposed outside the stack.
+  slicer:
+    build:
+      context: ./slicer
+      args:
+        ORCA_VERSION: ${ORCA_VERSION:-2.4.2}
+    image: printer-hub-slicer:local
+    pull_policy: build
+    container_name: printer-hub-slicer
+    restart: unless-stopped
+    environment:
       TZ: ${TZ:-UTC}
     volumes:
       - printer-hub-data:/data

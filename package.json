@@ -1,0 +1,18 @@
+{
+  "name": "printer-hub",
+  "version": "0.1.0",
+  "description": "Central dashboard for FlashForge AD5M and Anycubic Kobra X printers",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --config config.demo.json"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mpegts.js": "1.7.3",
+    "mqtt": "5.10.1"
+  }
+}

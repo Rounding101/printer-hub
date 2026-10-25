@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Printer Hub</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='4' width='24' height='24' rx='5' fill='%23e0883a'/><rect x='10' y='10' width='12' height='4' fill='white'/><rect x='14' y='14' width='4' height='8' fill='white'/></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <h1>Printer Hub</h1>
+    </div>
+    <nav class="tabs" aria-label="Views">
+      <a href="#printers" data-view="printers">Printers</a>
+      <a href="#jobs" data-view="jobs">Job log</a>
+      <a href="#totals" data-view="totals">Totals</a>
+    </nav>
+    <p id="summary" class="summary">Connecting…</p>
+    <span id="conn" class="conn" title="Live connection to server"></span>
+  </header>
+
+  <main id="grid" class="grid view" data-view="printers" aria-live="polite"></main>
+
+  <section class="view page" data-view="jobs totals" hidden>
+    <div class="toolbar">
+      <label>Period
+        <select id="f-period">
+          <option value="all">All time</option>
+          <option value="today">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="month">This month</option>
+          <option value="year">This year</option>
+        </select>
+      </label>
+      <label>Printer
+        <select id="f-printer"><option value="">All printers</option></select>
+      </label>
+      <label class="grow">Search
+        <input id="f-search" type="search" placeholder="Item or file name">
+      </label>
+      <div class="toolbar-actions">
+        <button id="add-past" class="btn ghost" type="button">Add past prints…</button>
+        <a class="btn ghost" href="/api/jobs.csv" download>Export CSV</a>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><span class="k">Items printed</span><span class="tile-v" id="t-items">0</span></div>
+      <div class="tile"><span class="k">Plates completed</span><span class="tile-v" id="t-plates">0</span></div>
+      <div class="tile"><span class="k">Print time</span><span class="tile-v" id="t-hours">0h</span></div>
+      <div class="tile"><span class="k">Success rate</span><span class="tile-v" id="t-rate">—</span></div>
+    </div>
+
+    <div class="table-wrap" data-sub="jobs">
+      <table class="table">
+        <thead><tr><th>Started</th><th>Printer</th><th>Item</th><th>Outcome</th><th class="num">Items / plate</th><th class="num">Print time</th><th></th></tr></thead>
+        <tbody id="jobs-body"></tbody>
+      </table>
+      <p class="table-empty" id="jobs-empty">No jobs yet. Prints are logged automatically while the hub is running.</p>
+    </div>
+
+    <div class="table-wrap" data-sub="totals">
+      <table class="table">
+        <thead><tr><th>Item</th><th class="num">Items</th><th class="num">Plates</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Failed / cancelled</th><th>Last printed</th><th></th></tr></thead>
+        <tbody id="totals-body"></tbody>
+      </table>
+      <p class="table-empty" id="totals-empty">Nothing printed in this period.</p>
+    </div>
+  </section>
+
+  <template id="card-tpl">
+    <article class="card">
+      <div class="cam">
+        <div class="cam-empty">No camera</div>
+        <button class="cam-full" type="button" title="Fullscreen" aria-label="Fullscreen camera">⤢</button>
+      </div>
+      <div class="body">
+        <div class="head">
+          <div>
+            <h2 class="name"></h2>
+            <p class="model"></p>
+          </div>
+          <span class="pill"></span>
+        </div>
+
+        <div class="job">
+          <p class="file"></p>
+          <div class="bar"><div class="fill"></div></div>
+          <div class="stats">
+            <div><span class="k">Progress</span><span class="v pct">—</span></div>
+            <div><span class="k">Layer</span><span class="v layer">—</span></div>
+            <div><span class="k">Elapsed</span><span class="v elapsed">—</span></div>
+            <div><span class="k">Remaining</span><span class="v remaining">—</span></div>
+          </div>
+        </div>
+        <p class="nojob">No active job</p>
+
+        <div class="temps"></div>
+        <p class="err" hidden></p>
+
+        <div class="actions">
+          <button class="btn act-pause" type="button">Pause</button>
+          <button class="btn act-resume primary" type="button">Resume</button>
+          <button class="btn act-cancel danger" type="button">Cancel</button>
+          <button class="btn act-print primary" type="button">Start print…</button>
+          <button class="btn act-light ghost" type="button">Light</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <dialog id="files-dlg">
+    <form method="dialog" class="dlg">
+      <h3>Start a print on <span class="dlg-name"></span></h3>
+      <p class="dlg-hint">Files stored on the printer</p>
+      <ul class="file-list"></ul>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dlg">
+    <form method="dialog" class="dlg">
+      <h3 class="confirm-title"></h3>
+      <p class="confirm-text"></p>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="no">Keep printing</button>
+        <button class="btn danger" value="yes">Cancel print</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="past-dlg">
+    <form method="dialog" class="dlg form">
+      <h3>Add past prints</h3>
+      <p class="dlg-hint">For prints made before the hub was logging. Each plate becomes one completed job.</p>
+      <label>Item or file name
+        <input name="file" list="known-items" required autocomplete="off">
+        <datalist id="known-items"></datalist>
+      </label>
+      <div class="form-row">
+        <label>Plates printed <input name="plates" type="number" min="1" value="1" required></label>
+        <label>Items per plate <input name="quantity" type="number" min="0" value="1" required></label>
+      </div>
+      <div class="form-row">
+        <label>Hours per plate <input name="hours" type="number" min="0" step="0.1" value="0"></label>
+        <label>Date <input name="date" type="date"></label>
+      </div>
+      <label>Printer <select name="printerId"><option value="">Not specified</option></select></label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="add">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts" role="status"></div>
+
+  <script src="/vendor/mpegts.js"></script>
+  <script src="/jobs.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

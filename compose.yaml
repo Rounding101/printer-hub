@@ -1,0 +1,20 @@
+services:
+  printer-hub:
+    build: .
+    image: printer-hub:local
+    pull_policy: build # rebuild from the checked-out commit on every deploy
+    container_name: printer-hub
+    restart: unless-stopped
+    ports:
+      - "${HUB_PORT:-3000}:3000"
+    environment:
+      AD5M_HOST: ${AD5M_HOST:?set AD5M_HOST}
+      AD5M_SERIAL: ${AD5M_SERIAL:-}
+      AD5M_CHECK_CODE: ${AD5M_CHECK_CODE:-}
+      KOBRAX_HOST: ${KOBRAX_HOST:?set KOBRAX_HOST}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - printer-hub-data:/data
+
+volumes:
+  printer-hub-data:

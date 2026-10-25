@@ -1,0 +1,8 @@
+{
+  "port": 3000,
+  "pollIntervalMs": 1000,
+  "printers": [
+    { "id": "ad5m", "name": "Adventurer 5M (demo)", "type": "mock", "startPrinting": true },
+    { "id": "kobrax", "name": "Kobra X (demo)", "type": "mock", "startPrinting": false }
+  ]
+}

@@ -9,12 +9,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DATA_DIR=/data \
     LANG=C.UTF-8
 
-# OrcaSlicer links GTK/WebKit/GL even when only the CLI is used.
+# OrcaSlicer links GTK/WebKit/GL/X11 even when only the CLI is used.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl nodejs \
+      ca-certificates curl nodejs apt-file \
       libgtk-3-0t64 libwebkit2gtk-4.1-0 libsoup-3.0-0 libsecret-1-0 \
-      libgl1 libegl1 libopengl0 libglu1-mesa libosmesa6 libgles2 \
+      libgl1 libegl1 libopengl0 libglu1-mesa libosmesa6 libgles2 libgbm1 \
       libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 \
+      libsm6 libice6 libx11-6 libx11-xcb1 libxext6 libxrender1 libxi6 libxrandr2 \
+      libxcursor1 libxinerama1 libxfixes3 libxxf86vm1 libxtst6 libxkbcommon-x11-0 \
       libdbus-1-3 libxkbcommon0 libfontconfig1 locales \
     && rm -rf /var/lib/apt/lists/*
 
@@ -27,8 +29,17 @@ RUN curl -fsSL -o /tmp/orca.AppImage "$ORCA_URL" \
     && echo "$ORCA_VERSION" > /opt/orca/VERSION \
     && test -d /opt/orca/resources/profiles
 
+# Install whatever shared libraries the binary still can't find, looked up by
+# file name with apt-file, until none are missing (fails the build otherwise).
+COPY install-missing-libs.sh /tmp/
+RUN sh /tmp/install-missing-libs.sh /opt/orca && rm /tmp/install-missing-libs.sh
+
 WORKDIR /app
-COPY profiles.js server.js ./
+COPY profiles.js server.js selftest.js ./
+
+# Fail the build now if Orca can't actually slice for either printer.
+RUN DATA_DIR=/tmp/selftest-data ORCA_HOME=/tmp/selftest-home node selftest.js \
+    && rm -rf /tmp/selftest-home
 
 # ubuntu:24.04 ships uid 1000 "ubuntu", matching the hub's "node" user so both
 # can read and write the shared /data volume.

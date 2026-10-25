@@ -199,5 +199,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-fs.mkdirSync(ORCA_HOME, { recursive: true });
-server.listen(PORT, () => console.log(`Slicer service (OrcaSlicer ${version}) on :${PORT}`));
+fs.mkdirSync(path.join(ORCA_HOME, 'data'), { recursive: true });
+if (require.main === module) {
+  server.listen(PORT, () => console.log(`Slicer service (OrcaSlicer ${version}) on :${PORT}`));
+}
+
+module.exports = { slice, store };

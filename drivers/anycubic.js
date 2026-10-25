@@ -7,6 +7,7 @@
 const crypto = require('node:crypto');
 const mqtt = require('mqtt');
 const { PrinterDriver } = require('./base');
+const { postMultipart } = require('../lib/multipart');
 
 const PREFIX = 'anycubic/anycubicCloud/v1';
 const PAUSE = { PRINTING: 0, PAUSED: 1, PAUSING: 2, RESUMING: 3, STOPPING: 4 };
@@ -220,16 +221,16 @@ class AnycubicDriver extends PrinterDriver {
 
   // Publishes a command and resolves with the printer's report for it; rejects
   // if the printer reports failure.
-  request(type, action, data, timeoutMs = 10000) {
+  request(type, action, data, timeoutMs = 10000, channel = 'web') {
     return new Promise((resolve, reject) => {
       const key = `${type}:${action}`;
       const timer = setTimeout(() => { this.pending.delete(key); reject(new Error('Printer did not respond')); }, timeoutMs);
       this.pending.set(key, (msg) => {
         clearTimeout(timer);
-        if (msg.state === 'failed' || (msg.code && msg.code !== 200)) reject(new Error(`Printer refused ${action} (code ${msg.code})`));
+        if (msg.state === 'failed' || (msg.code && msg.code !== 200)) reject(new Error(`Printer refused ${action} (code ${msg.code}${msg.msg ? `: ${msg.msg}` : ''})`));
         else resolve(msg);
       });
-      try { this.publish('web', type, action, data); } catch (err) { clearTimeout(timer); this.pending.delete(key); reject(err); }
+      try { this.publish(channel, type, action, data); } catch (err) { clearTimeout(timer); this.pending.delete(key); reject(err); }
     });
   }
 
@@ -259,13 +260,105 @@ class AnycubicDriver extends PrinterDriver {
       for (const f of records) files.set(f.fileKey || f.filename, f);
       if (records.length < pageSize || files.size === before) break;
     }
+    this.fileRecords = new Map([...files.values()].map((f) => [f.filename, f]));
     return [...files.values()]
       .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
       .map((f) => ({ name: f.filename, size: f.size || null }));
   }
 
-  async startPrint(filename) {
-    await this.request('print', 'start', { filename, filetype: 1, taskid: '-1' }, 15000);
+  async fileRecord(filename) {
+    if (!this.fileRecords?.has(filename)) await this.listFiles();
+    const rec = this.fileRecords.get(filename);
+    if (!rec) throw new Error(`${filename} is not on the printer`);
+    return rec;
+  }
+
+  // Colors used by a file and the filament slots available to feed them,
+  // with a suggested slot for each color (same material, closest color).
+  async printOptions(filename) {
+    const [details, box] = await Promise.all([
+      this.request('file', 'fileDetails', { root: 'local', filename }),
+      this.request('multiColorBox', 'getInfo', null),
+    ]);
+    const paints = details.data?.file_details?.paint_infos || [];
+    const boxes = box.data?.multi_color_box || [];
+    const slots = boxes.flatMap((b, bi) => (b.slots || []).map((s) => ({
+      index: bi * 4 + s.index,
+      color: (s.color || [0, 0, 0]).slice(0, 3),
+      type: s.type || 'Unknown',
+      ready: s.status === 5,
+    })));
+    const base = (t) => String(t || '').split(/\s+/)[0].toUpperCase();
+    const dist = (a, b) => a.reduce((n, v, i) => n + (v - (b[i] ?? 0)) ** 2, 0);
+    const colors = paints.map((p) => {
+      const color = (p.paint_color || [0, 0, 0]).slice(0, 3);
+      const candidates = slots.filter((s) => s.ready && base(s.type) === base(p.material_type));
+      const pool = candidates.length ? candidates : slots.filter((s) => s.ready);
+      const best = pool.sort((a, b) => dist(a.color, color) - dist(b.color, color))[0];
+      return { index: p.paint_index, color, material: p.material_type, grams: p.filament_used || 0, slot: best ? best.index : null };
+    });
+    return {
+      colors,
+      slots,
+      options: [{ key: 'autoLevel', label: 'Auto-level before printing', default: true }],
+    };
+  }
+
+  // Payload validated on Kobra X FW 2.0.2.2 (see eduardobittencourt/kobra-lan-cli).
+  async startPrint(filename, { mapping, autoLevel = true } = {}) {
+    const rec = await this.fileRecord(filename);
+    const opts = await this.printOptions(filename);
+    const slotFor = (paint) => {
+      const chosen = mapping && mapping[paint.index] != null ? Number(mapping[paint.index]) : paint.slot;
+      const slot = opts.slots.find((s) => s.index === chosen);
+      if (!slot) throw new Error(`Pick a filament slot for color ${paint.index + 1}`);
+      return slot;
+    };
+    const ams = opts.colors.map((p) => {
+      const slot = slotFor(p);
+      return {
+        paint_index: p.index,
+        ams_index: slot.index,
+        paint_color: [...p.color, 255],
+        ams_color: [...slot.color, 255],
+        material_type: slot.type,
+      };
+    });
+    await this.request('print', 'start', {
+      taskid: '-1',
+      url: '',
+      filename,
+      md5: rec.fileKey || '',
+      filepath: null,
+      filetype: 1,
+      project_type: 1,
+      filesize: rec.size || 0,
+      ams_settings: { use_ams: ams.length > 0, ams_box_mapping: ams },
+      task_settings: {
+        auto_leveling: autoLevel ? 1 : 0,
+        vibration_compensation: 0,
+        flow_calibration: 0,
+        dry_mode: 0,
+        ai_settings: { status: 0, count: 0, type: 0 },
+        timelapse: { status: 0, count: 0, type: 0 },
+        drying_settings: { status: 0, target_temp: 0, duration: 0, remain_time: 0 },
+        model_objects_skip_parts: [],
+      },
+    }, 20000, 'slicer');
+  }
+
+  async upload(filename, data) {
+    if (!/\.gcode$/i.test(filename)) throw new Error('The Kobra X accepts .gcode files');
+    if (!['idle', 'completed'].includes(this.state.status)) throw new Error('Printer must be idle to receive files');
+    const url = this.info.urls?.fileUploadurl;
+    if (!url) throw new Error('Printer has not reported an upload address yet');
+    const res = await postMultipart(url, {
+      fields: { filename },
+      file: { field: 'gcode', name: filename, data },
+      headers: { 'User-Agent': 'AnycubicSlicerNext/1.3.9.4', 'X-BBL-Client-Name': 'AnycubicSlicerNext', 'X-BBL-Client-Type': 'slicer', 'X-File-Length': String(data.length) },
+    });
+    if (res.code !== 200) throw new Error(`Printer rejected the upload (code ${res.code})`);
+    this.fileRecords = null; // refresh listing on next use
   }
 
   cameraUrl() {

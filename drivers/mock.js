@@ -7,6 +7,7 @@ class MockDriver extends PrinterDriver {
   constructor(cfg, opts) {
     super(cfg, opts);
     this.state.capabilities = { pause: true, resume: true, cancel: true, light: true, files: true };
+    this.files = [...FILES];
     this.sim = { status: 'idle', progress: 0, file: null, light: true, nozzle: 24, bed: 23 };
     if (cfg.startPrinting) Object.assign(this.sim, { status: 'printing', progress: 37, file: FILES[0], nozzle: 220, bed: 60 });
   }
@@ -58,8 +59,29 @@ class MockDriver extends PrinterDriver {
   async resume() { if (this.sim.status === 'paused') this.sim.status = 'printing'; this.tick(); }
   async cancel() { Object.assign(this.sim, { status: 'idle', file: null, progress: 0 }); this.tick(); }
   async setLight(on) { this.sim.light = on; this.tick(); }
-  async listFiles() { return FILES.map((name) => ({ name })); }
-  async startPrint(file) { Object.assign(this.sim, { status: 'heating', file, progress: 0 }); this.tick(); }
+  async listFiles() { return this.files.map((name) => ({ name })); }
+  async printOptions(file) {
+    if (!this.cfg.multiColor) return { colors: [], slots: [], options: [{ key: 'autoLevel', label: 'Auto-level before printing', default: false }] };
+    const slots = [
+      { index: 0, color: [241, 240, 237], type: 'PLA High Speed', ready: true },
+      { index: 1, color: [239, 96, 163], type: 'PLA Matte', ready: true },
+      { index: 2, color: [255, 194, 244], type: 'PLA Matte', ready: false },
+      { index: 3, color: [158, 166, 180], type: 'PLA+', ready: true },
+    ];
+    const colors = /benchy/.test(file)
+      ? [{ index: 0, color: [230, 90, 160], material: 'PLA', grams: 12, slot: 1 }, { index: 1, color: [250, 250, 250], material: 'PLA', grams: 3, slot: 0 }]
+      : [{ index: 0, color: [254, 209, 65], material: 'PLA', grams: 8, slot: 0 }];
+    return { colors, slots, options: [{ key: 'autoLevel', label: 'Auto-level before printing', default: true }] };
+  }
+  async startPrint(file, opts = {}) {
+    this.lastStart = { file, ...opts };
+    Object.assign(this.sim, { status: 'heating', file, progress: 0 });
+    this.tick();
+  }
+  async upload(name, data) {
+    if (!data.length) throw new Error('Empty file');
+    if (!this.files.includes(name)) this.files.unshift(name);
+  }
 
   // Streams a moving SVG test pattern as multipart/x-mixed-replace, like an MJPEG camera.
   serveCamera(req, res) {

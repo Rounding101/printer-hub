@@ -6,6 +6,7 @@
 // 8899, which needs no credentials but reports less detail.
 const net = require('node:net');
 const { PrinterDriver } = require('./base');
+const { postMultipart } = require('../lib/multipart');
 
 const HTTP_PORT = 8898;
 const TCP_PORT = 8899;
@@ -203,9 +204,38 @@ class FlashForgeDriver extends PrinterDriver {
     return (body.gcodeList || []).map((name) => ({ name }));
   }
 
-  async startPrint(fileName) {
+  async printOptions() {
+    return {
+      colors: [],
+      slots: [],
+      options: [{ key: 'autoLevel', label: 'Auto-level before printing', default: !!this.cfg.levelBeforePrint }],
+    };
+  }
+
+  async startPrint(fileName, { autoLevel = !!this.cfg.levelBeforePrint } = {}) {
     if (this.mode !== 'http') throw new Error('Needs serialNumber + checkCode in config to start prints');
-    await this.post('/printGcode', { fileName, levelingBeforePrint: !!this.cfg.levelBeforePrint });
+    await this.post('/printGcode', { fileName, levelingBeforePrint: !!autoLevel });
+  }
+
+  async upload(fileName, data) {
+    if (this.mode !== 'http') throw new Error('Needs serialNumber + checkCode in config to upload files');
+    if (!/\.(gcode|gx|3mf)$/i.test(fileName)) throw new Error('The AD5M accepts .gcode, .gx and .3mf files');
+    const res = await postMultipart(`http://${this.cfg.host}:${HTTP_PORT}/uploadGcode`, {
+      file: { field: 'gcodeFile', name: fileName, data },
+      expectContinue: true,
+      headers: {
+        serialNumber: this.cfg.serialNumber,
+        checkCode: this.cfg.checkCode,
+        fileSize: String(data.length),
+        printNow: 'false',
+        levelingBeforePrint: 'false',
+        flowCalibration: 'false',
+        useMatlStation: 'false',
+        gcodeToolCnt: '0',
+        materialMappings: Buffer.from('[]').toString('base64'),
+      },
+    });
+    if (res.code !== 0) throw new Error(res.message || `Printer rejected the upload (code ${res.code})`);
   }
 
   cameraUrl() {

@@ -114,12 +114,13 @@ function createCard(state) {
   q('.act-resume').onclick = run(q('.act-resume'), 'resume');
   q('.act-light').onclick = run(q('.act-light'), 'light', () => ({ on: !card.state.light }));
   q('.act-cancel').onclick = () => confirmCancel(card, run(q('.act-cancel'), 'cancel'));
-  q('.act-print').onclick = () => openFiles(card);
+  q('.act-print').onclick = () => Files.openPrinterFiles(card.state.id);
   q('.cam-full').onclick = () => q('.cam').requestFullscreen?.();
 
   cards.set(state.id, card);
   grid.append(el);
   Jobs.syncPrinters();
+  Files.renderLibrary();
   return card;
 }
 
@@ -178,6 +179,8 @@ function render(state) {
 
   mountCamera(card);
   updateSummary();
+  const key = `${state.online}:${state.status}`;
+  if (card.statusKey !== key) { card.statusKey = key; Files.renderLibrary(); }
 }
 
 function updateSummary() {
@@ -201,45 +204,11 @@ function confirmCancel(card, go) {
   dlg.showModal();
 }
 
-async function openFiles(card) {
-  const dlg = document.getElementById('files-dlg');
-  const list = dlg.querySelector('.file-list');
-  dlg.querySelector('.dlg-name').textContent = card.state.name;
-  list.innerHTML = '<li class="empty">Loading…</li>';
-  dlg.showModal();
-  try {
-    const files = await api(`/api/printers/${encodeURIComponent(card.state.id)}/files`);
-    if (!files.length) { list.innerHTML = '<li class="empty">No files found on the printer</li>'; return; }
-    list.replaceChildren(...files.map((f) => {
-      const li = document.createElement('li');
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = f.name;
-      b.title = f.name;
-      b.onclick = async () => {
-        dlg.close();
-        try {
-          await api(`/api/printers/${encodeURIComponent(card.state.id)}/print`, { body: { file: f.name } });
-          toast(`Starting ${f.name} on ${card.state.name}`);
-        } catch (err) { toast(err.message, true); }
-      };
-      li.append(b);
-      return li;
-    }));
-  } catch (err) {
-    list.innerHTML = '';
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = err.message;
-    list.append(li);
-  }
-}
-
 // ---- Views ----------------------------------------------------------------------
 
 function showView() {
   const view = (location.hash.slice(1) || 'printers');
-  const known = ['printers', 'jobs', 'totals'].includes(view) ? view : 'printers';
+  const known = ['printers', 'library', 'jobs', 'totals'].includes(view) ? view : 'printers';
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
   document.querySelectorAll('[data-sub]').forEach((el) => { el.hidden = el.dataset.sub !== known; });
   document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === known ? 'page' : 'false'));
@@ -257,6 +226,7 @@ function connect() {
   es.addEventListener('printer', (e) => render(JSON.parse(e.data)));
   es.addEventListener('jobs', (e) => Jobs.setAll(JSON.parse(e.data)));
   es.addEventListener('job', (e) => Jobs.upsert(JSON.parse(e.data)));
+  es.addEventListener('library', (e) => Files.setLibrary(JSON.parse(e.data)));
   es.onerror = () => conn.classList.remove('live'); // EventSource reconnects on its own
 }
 

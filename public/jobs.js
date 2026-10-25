@@ -40,13 +40,7 @@ const Jobs = (() => {
     const ready = p && p.online && ['idle', 'completed'].includes(p.status);
     b.disabled = !ready;
     b.title = !p ? 'Printer not in the hub' : ready ? `Print ${file} on ${p.name}` : `${p.name} is ${p.online ? p.status : 'offline'}`;
-    b.onclick = async () => {
-      if (!confirm(`Start ${file} on ${p.name}?`)) return;
-      try {
-        await api(`/api/printers/${encodeURIComponent(printerId)}/print`, { body: { file } });
-        toast(`Starting ${file} on ${p.name}`);
-      } catch (err) { toast(err.message, true); }
-    };
+    b.onclick = () => Files.openPrint(printerId, file);
     return b;
   }
 

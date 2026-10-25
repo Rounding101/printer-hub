@@ -44,7 +44,10 @@ class PrinterDriver extends EventEmitter {
   async cancel() { throw new Error('cancel not supported'); }
   async setLight() { throw new Error('light control not supported'); }
   async listFiles() { return []; }
+  // { colors: [{index, color, material, slot}], slots: [{index, color, type, ready}], options: [{key, label, default}] }
+  async printOptions() { return { colors: [], slots: [], options: [] }; }
   async startPrint() { throw new Error('starting prints not supported'); }
+  async upload() { throw new Error('uploading files not supported'); }
 
   // Returns { url, headers? } for the upstream camera stream, or null.
   cameraSource() { return null; }

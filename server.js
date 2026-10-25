@@ -6,6 +6,7 @@ const { FlashForgeDriver } = require('./drivers/flashforge');
 const { AnycubicDriver } = require('./drivers/anycubic');
 const { MockDriver } = require('./drivers/mock');
 const { JobLog } = require('./lib/jobs');
+const { Library } = require('./lib/library');
 
 const DRIVERS = { flashforge: FlashForgeDriver, anycubic: AnycubicDriver, mock: MockDriver };
 
@@ -40,6 +41,7 @@ const dataDir = process.env.DATA_DIR || config.dataDir
   ? path.resolve(__dirname, process.env.DATA_DIR || config.dataDir)
   : path.join(__dirname, path.basename(configPath) === 'config.json' ? 'data' : `data-${path.basename(configPath, '.json').replace(/^config\.?/, '') || 'alt'}`);
 const jobs = new JobLog(dataDir);
+const library = new Library(dataDir);
 
 // ---- Live updates (Server-Sent Events) ---------------------------------------
 
@@ -58,6 +60,13 @@ for (const driver of printers.values()) {
 }
 jobs.on('job', (job) => broadcast('job', job));
 jobs.on('reset', () => broadcast('jobs', jobs.list()));
+library.on('change', (items) => broadcast('library', items));
+
+// Sends a library file to a printer's own storage.
+async function sendToPrinter(item, printer) {
+  await printer.upload(item.name, library.read(item.id));
+  library.markSent(item.id, printer.state.id);
+}
 
 // ---- HTTP helpers ------------------------------------------------------------
 
@@ -99,6 +108,7 @@ const STATIC = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/jobs.js': ['public/jobs.js', 'text/javascript; charset=utf-8'],
+  '/files.js': ['public/files.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
   '/vendor/mpegts.js': ['node_modules/mpegts.js/dist/mpegts.js', 'text/javascript; charset=utf-8'],
 };
@@ -112,7 +122,7 @@ const ACTIONS = {
   light: (p, body) => p.setLight(!!body.on),
   print: (p, body) => {
     if (!body.file) throw new Error('file is required');
-    return p.startPrint(String(body.file));
+    return p.startPrint(String(body.file), { mapping: body.mapping, autoLevel: body.autoLevel });
   },
 };
 
@@ -137,6 +147,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot())}\n\n`);
     res.write(`event: jobs\ndata: ${JSON.stringify(jobs.list())}\n\n`);
+    res.write(`event: library\ndata: ${JSON.stringify(library.list())}\n\n`);
     clients.add(res);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => { clients.delete(res); clearInterval(ping); });
@@ -165,6 +176,36 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // /api/library, /api/library/:id[/download|/send]
+  if (parts[1] === 'library') {
+    try {
+      if (!parts[2] && req.method === 'GET') return json(res, 200, library.list());
+      if (!parts[2] && req.method === 'POST') {
+        return json(res, 200, await library.addFromStream(url.searchParams.get('name'), req));
+      }
+      const item = library.get(parts[2]);
+      if (parts[3] === 'download' && req.method === 'GET') {
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': item.size,
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(item.name)}`,
+        });
+        return fs.createReadStream(library.filePath(item)).pipe(res);
+      }
+      if (parts[3] === 'send' && req.method === 'POST') {
+        const body = await readBody(req);
+        const p = printers.get(body.printerId);
+        if (!p) throw new Error('Unknown printer');
+        await sendToPrinter(item, p);
+        return json(res, 200, { ok: true, file: item.name });
+      }
+      if (!parts[3] && req.method === 'DELETE') { library.remove(item.id); return json(res, 200, { ok: true }); }
+      return json(res, 404, { error: 'Not found' });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
   // /api/printers/:id/:resource
   const printer = parts[1] === 'printers' && printers.get(parts[2]);
   if (!printer) return json(res, 404, { error: 'Unknown printer' });
@@ -179,6 +220,17 @@ const server = http.createServer(async (req, res) => {
       if (resource === 'snapshot') return proxy(req, res, printer.snapshotSource());
       if (resource === 'thumb') return proxy(req, res, printer.thumbSource());
       if (resource === 'files') return json(res, 200, await printer.listFiles());
+      if (resource === 'print-options') return json(res, 200, await printer.printOptions(String(url.searchParams.get('file') || '')));
+    }
+    // Upload from the browser: kept in the library, then sent to the printer.
+    if (req.method === 'POST' && resource === 'upload') {
+      const item = await library.addFromStream(url.searchParams.get('name'), req);
+      try {
+        await sendToPrinter(item, printer);
+      } catch (err) {
+        throw new Error(`Saved to the library, but the printer didn't take it: ${err.message}`);
+      }
+      return json(res, 200, { ok: true, file: item.name, libraryId: item.id });
     }
     if (req.method === 'POST' && ACTIONS[resource]) {
       await ACTIONS[resource](printer, await readBody(req));

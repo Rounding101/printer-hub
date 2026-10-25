@@ -86,6 +86,26 @@ Give both printers a DHCP reservation in your router so the IPs don't change.
   a start-camera command and plays the stream with mpegts.js. If the stream
   fails, it falls back to still snapshots.
 
+## Files: library, uploads and starting prints
+
+- **Library tab:** drop `.gcode`, `.gx`, `.3mf` or `.bgcode` files (up to 512 MB)
+  to store them on the hub, in `data/library/` (the `printer-hub-data` volume in
+  Docker). The hub reads the slicer header to show which printer and material
+  each file was sliced for, and suggests a matching printer. **Send** copies the
+  file to a printer. **Print…** sends it if needed, then opens the print dialog.
+- **Start print… → Upload from computer:** uploads straight to that printer
+  and keeps a copy in the library. With **Print after upload** on, the print
+  dialog opens right after.
+- **Print dialog:** on the Kobra X, each color in the file is mapped to an ACE
+  slot. The default is the loaded slot with the same material and the closest
+  color, and you can change it. Both printers have an auto-level option.
+- **Reprint** in the job log opens the same dialog. If the file is gone from
+  the printer but still in the library, it offers to send it again.
+
+Kobra X uploads and starts follow the format validated on firmware 2.0.2.2
+by [kobra-lan-cli](https://github.com/eduardobittencourt/kobra-lan-cli). The
+printer must be idle to receive files.
+
 ## Job log and totals
 
 While the hub is running, it logs every print by itself: start, finish and

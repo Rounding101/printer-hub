@@ -15,6 +15,7 @@
     </div>
     <nav class="tabs" aria-label="Views">
       <a href="#printers" data-view="printers">Printers</a>
+      <a href="#library" data-view="library">Library</a>
       <a href="#jobs" data-view="jobs">Job log</a>
       <a href="#totals" data-view="totals">Totals</a>
     </nav>
@@ -23,6 +24,28 @@
   </header>
 
   <main id="grid" class="grid view" data-view="printers" aria-live="polite"></main>
+
+  <section class="view page" data-view="library" hidden>
+    <div class="dropzone" id="lib-drop">
+      <p><strong>Drop print files here</strong> or
+        <label class="link-btn">browse<input type="file" id="lib-input" accept=".gcode,.gx,.3mf,.bgcode" multiple hidden></label>
+      </p>
+      <p class="dlg-hint">.gcode, .gx, .3mf or .bgcode, up to 512 MB. Files are stored on the hub so you can send them to any printer later.</p>
+      <div class="progress" id="lib-progress" hidden><div class="progress-fill"></div><span class="progress-text"></span></div>
+    </div>
+    <div class="toolbar">
+      <label class="grow">Search
+        <input id="lib-search" type="search" placeholder="File name or printer model">
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>File</th><th>Sliced for</th><th class="num">Size</th><th></th></tr></thead>
+        <tbody id="lib-body"></tbody>
+      </table>
+      <p class="table-empty" id="lib-empty">No files yet. Drop some above, or upload one from a printer's Start print dialog.</p>
+    </div>
+  </section>
 
   <section class="view page" data-view="jobs totals" hidden>
     <div class="toolbar">
@@ -115,11 +138,31 @@
 
   <dialog id="files-dlg">
     <form method="dialog" class="dlg">
-      <h3>Start a print on <span class="dlg-name"></span></h3>
-      <p class="dlg-hint">Files stored on the printer</p>
+      <h3>Files on <span class="dlg-name"></span></h3>
+      <div class="upload-row">
+        <label class="btn primary file-pick">Upload from computer…
+          <input type="file" class="upload-input" accept=".gcode,.gx,.3mf,.bgcode" hidden>
+        </label>
+        <label class="check"><input type="checkbox" class="upload-print" checked> Print after upload</label>
+      </div>
+      <div class="progress" hidden><div class="progress-fill"></div><span class="progress-text"></span></div>
+      <p class="dlg-hint">Pick a file to print. Uploads are also kept in the hub's <a href="#library" class="lib-link">Library</a>.</p>
+      <input type="search" class="file-filter" placeholder="Filter files" aria-label="Filter files">
       <ul class="file-list"></ul>
       <div class="dlg-actions">
         <button class="btn ghost" value="cancel">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="print-dlg">
+    <form method="dialog" class="dlg">
+      <h3>Print on <span class="pd-printer"></span></h3>
+      <p class="pd-file"></p>
+      <div class="pd-body"><p class="dlg-hint">Loading print options…</p></div>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary pd-start" value="start" disabled>Start print</button>
       </div>
     </form>
   </dialog>
@@ -163,6 +206,7 @@
 
   <script src="/vendor/mpegts.js"></script>
   <script src="/jobs.js"></script>
+  <script src="/files.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -90,6 +90,7 @@ body {
   place-items: center;
 }
 .cam > :is(img, video) { width: 100%; height: 100%; object-fit: contain; display: block; grid-area: 1 / 1; }
+.cam:not(.has-feed) > :is(img, video) { visibility: hidden; } /* no broken-image icon/alt text while a feed is failing */
 .cam-empty { color: #7c8594; font-size: 13px; grid-area: 1 / 1; }
 .cam.has-feed .cam-empty { display: none; }
 .cam-full {

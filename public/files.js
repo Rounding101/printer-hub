@@ -251,6 +251,7 @@ const Files = (() => {
             i.copies > 1 && `${i.copies} copies`,
             i.material, i.grams && `${Math.round(i.grams)} g`, i.estimate,
             sent && `On ${sent}`,
+            !i.printerModel && !i.slicedFor && 'Target printer unknown, check before printing',
           ].filter(Boolean).join(' · '),
         }),
       );
@@ -264,17 +265,27 @@ const Files = (() => {
       const sel = document.createElement('select');
       sel.className = 'small';
       sel.setAttribute('aria-label', 'Printer');
-      for (const p of printers) sel.add(new Option(p.name, p.id));
-      const sug = suggestPrinter(i);
-      if (sug) sel.value = sug.id;
+      // Printers the file wasn't sliced for are listed but can't be picked.
+      const fit = (id) => i.fits?.[id] || { ok: true, unknown: true };
+      for (const p of printers) {
+        const f = fit(p.id);
+        const o = new Option(f.ok ? p.name : `${p.name} (sliced for another printer)`, p.id);
+        o.disabled = !f.ok;
+        sel.add(o);
+      }
+      const match = printers.find((p) => fit(p.id).ok && !fit(p.id).unknown) || suggestPrinter(i) || printers.find((p) => fit(p.id).ok);
+      if (match) sel.value = match.id;
       const send = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Send' });
       const print = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small primary', textContent: 'Print…' });
       const sync = () => {
         const p = cards.get(sel.value)?.state;
-        send.disabled = !(p && p.online && p.capabilities?.files);
-        print.disabled = !canPrint(p);
-        print.title = p && !canPrint(p) ? `${p.name} is ${p.online ? p.status : 'offline'}` : '';
+        const f = fit(sel.value);
+        send.disabled = !f.ok || !(p && p.online && p.capabilities?.files);
+        print.disabled = !f.ok || !canPrint(p);
+        const why = !f.ok ? `This file ${f.reason}` : p && !canPrint(p) ? `${p.name} is ${p.online ? p.status : 'offline'}` : '';
+        print.title = send.title = why;
       };
+      if (!printers.some((p) => fit(p.id).ok)) sel.disabled = true;
       sel.onchange = sync;
       sync();
       send.onclick = async () => {

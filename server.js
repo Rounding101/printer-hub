@@ -7,6 +7,7 @@ const { AnycubicDriver } = require('./drivers/anycubic');
 const { MockDriver } = require('./drivers/mock');
 const { JobLog } = require('./lib/jobs');
 const { Library } = require('./lib/library');
+const { checkFile } = require('./lib/compat');
 
 const DRIVERS = { flashforge: FlashForgeDriver, anycubic: AnycubicDriver, mock: MockDriver };
 
@@ -60,11 +61,27 @@ for (const driver of printers.values()) {
 }
 jobs.on('job', (job) => broadcast('job', job));
 jobs.on('reset', () => broadcast('jobs', jobs.list()));
-library.on('change', (items) => broadcast('library', items));
+library.on('change', () => broadcast('library', libraryView()));
+
+// Refuses print files sliced for a different printer.
+function assertFits(item, printer) {
+  const fit = checkFile(item, printer.cfg, printer.state.name);
+  if (!fit.ok) throw new Error(`${item.name} ${fit.reason}. Slice it for this printer instead.`);
+}
+
+// Library entries as sent to the browser, with per-printer compatibility.
+const libraryView = () => library.list().map((i) => (i.kind === 'model' ? i : {
+  ...i,
+  fits: Object.fromEntries([...printers.values()].map((p) => {
+    const f = checkFile(i, p.cfg, p.state.name);
+    return [p.state.id, { ok: f.ok, unknown: !!f.unknown, reason: f.reason || null }];
+  })),
+}));
 
 // Sends a library file to a printer's own storage.
 async function sendToPrinter(item, printer) {
   if (item.kind === 'model') throw new Error(`${item.name} is a model; slice it first`);
+  assertFits(item, printer);
   await printer.upload(item.name, library.read(item.id));
   library.markSent(item.id, printer.state.id);
 }
@@ -201,6 +218,10 @@ const ACTIONS = {
   slots: (p) => (p.refreshSlots ? p.refreshSlots() : p.state.slots),
   print: (p, body) => {
     if (!body.file) throw new Error('file is required');
+    // Files the library knows are checked here; drivers check what the printer
+    // itself reports (e.g. the Kobra X's per-file printer_model).
+    const known = library.findByName(String(body.file));
+    if (known && known.kind !== 'model') assertFits(known, p);
     return p.startPrint(String(body.file), { mapping: body.mapping, autoLevel: body.autoLevel });
   },
 };
@@ -239,7 +260,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot())}\n\n`);
     res.write(`event: jobs\ndata: ${JSON.stringify(jobs.list())}\n\n`);
-    res.write(`event: library\ndata: ${JSON.stringify(library.list())}\n\n`);
+    res.write(`event: library\ndata: ${JSON.stringify(libraryView())}\n\n`);
     clients.add(res);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => { clients.delete(res); clearInterval(ping); });
@@ -292,7 +313,7 @@ const server = http.createServer(async (req, res) => {
   // /api/library, /api/library/:id[/download|/send|/slice]
   if (parts[1] === 'library') {
     try {
-      if (!parts[2] && req.method === 'GET') return json(res, 200, library.list());
+      if (!parts[2] && req.method === 'GET') return json(res, 200, libraryView());
       if (!parts[2] && req.method === 'POST') {
         return json(res, 200, await library.addFromStream(url.searchParams.get('name'), req));
       }

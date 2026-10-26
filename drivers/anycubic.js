@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const mqtt = require('mqtt');
 const { PrinterDriver } = require('./base');
 const { postMultipart } = require('../lib/multipart');
+const { matcherFor } = require('../lib/compat');
 
 const PREFIX = 'anycubic/anycubicCloud/v1';
 const PAUSE = { PRINTING: 0, PAUSED: 1, PAUSING: 2, RESUMING: 3, STOPPING: 4 };
@@ -361,6 +362,13 @@ class AnycubicDriver extends PrinterDriver {
       this.request('file', 'fileDetails', { root: 'local', filename }),
       this.request('multiColorBox', 'getInfo', null),
     ]);
+    // The printer reports which model each stored file was sliced for; refuse
+    // files meant for another printer (also covers startPrint, which calls this).
+    const model = details.data?.file_details?.printer_model;
+    const re = matcherFor(this.cfg);
+    if (model && re && !re.test(model)) {
+      throw new Error(`${filename} was sliced for ${model}, not ${this.state.name}. Slice it for this printer instead.`);
+    }
     const paints = details.data?.file_details?.paint_infos || [];
     const boxes = box.data?.multi_color_box || [];
     const slots = boxes.flatMap((b, bi) => (b.slots || []).map((s) => ({

@@ -250,6 +250,7 @@ const Files = (() => {
             model ? `Sliced from ${model.name}` : `Added ${added}`,
             i.copies > 1 && `${i.copies} copies`,
             i.material, i.grams && `${Math.round(i.grams)} g`, i.estimate,
+            i.bedTemp != null && (i.bedTemp < 45 ? `bed only ${i.bedTemp}°C (${i.bedType || 'plate'}), re-slice` : `bed ${i.bedTemp}°C`),
             sent && `On ${sent}`,
             !i.printerModel && !i.slicedFor && 'Target printer unknown, check before printing',
           ].filter(Boolean).join(' · '),
@@ -423,6 +424,9 @@ const Files = (() => {
         const mem = lastSlice.byPrinter?.[f.printerId.value] || {};
         pick(f.process, pr.processes, pr.defaults.process, mem.process);
         pick(f.filament, pr.filaments, pr.defaults.filament, mem.filament);
+        const beds = pr.bedTypes || [];
+        f.bedType.replaceChildren(...beds.map((b) => new Option(b.label, b.value)));
+        f.bedType.value = beds.some((b) => b.value === mem.bedType) ? mem.bedType : (pr.defaults.bedType || beds[0]?.value || '');
       } catch (err) {
         f.process.replaceChildren(new Option(err.message, ''));
         f.filament.replaceChildren();
@@ -439,12 +443,13 @@ const Files = (() => {
         printerId,
         process: f.process.value,
         filament: f.filament.value,
+        bedType: f.bedType.value || undefined,
         copies: Number(f.copies.value) || 1,
         orient: f.orient.checked,
         options: { infill: Number(f.infill.value), supports: f.supports.value, brim: f.brim.checked, walls: Number(f.walls.value) || 2 },
       };
       Object.assign(lastSlice, { printerId, copies: body.copies, infill: body.options.infill, supports: body.options.supports, brim: body.options.brim, walls: body.options.walls, orient: body.orient });
-      lastSlice.byPrinter = { ...(lastSlice.byPrinter || {}), [printerId]: { process: body.process, filament: body.filament } };
+      lastSlice.byPrinter = { ...(lastSlice.byPrinter || {}), [printerId]: { process: body.process, filament: body.filament, bedType: body.bedType } };
       try { localStorage.setItem('lastSlice', JSON.stringify(lastSlice)); } catch { /* storage unavailable */ }
 
       go.disabled = true;
@@ -459,8 +464,12 @@ const Files = (() => {
         status.replaceChildren(
           Object.assign(document.createElement('strong'), { textContent: 'Sliced' }),
           document.createTextNode(` ${[item.estimate, item.grams && `${Math.round(item.grams)} g`, `${item.copies} ${item.copies === 1 ? 'copy' : 'copies'}`].filter(Boolean).join(' · ')}`),
+          Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [item.bedTemp != null && `Bed ${item.bedTemp}°C`, item.nozzleTemp && `nozzle ${item.nozzleTemp}°C`, item.bedType].filter(Boolean).join(' · ') }),
           Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: item.name }),
         );
+        if (item.bedTemp != null && item.bedTemp < 45) {
+          status.append(Object.assign(document.createElement('span'), { className: 'err', textContent: `Heads up: the bed only heats to ${item.bedTemp}°C on this plate setting.` }));
+        }
         go.hidden = true;
         dlg.querySelector('.sd-close').textContent = 'Done';
         const print = Object.assign(document.createElement('button'), { type: 'button', className: 'btn primary', textContent: 'Send & print…' });

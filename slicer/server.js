@@ -15,6 +15,15 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || '/data');
 const ORCA_HOME = process.env.ORCA_HOME || '/tmp/orca-home';
 const TIMEOUT_MS = Number(process.env.SLICE_TIMEOUT_MS) || 20 * 60 * 1000;
 const MODEL_EXT = /\.(stl|obj|3mf|step|stp|amf)$/i;
+// Orca's curr_bed_type values and their GUI labels.
+const BED_TYPES = [
+  { value: 'Textured PEI Plate', label: 'Textured PEI Plate' },
+  { value: 'High Temp Plate', label: 'Smooth PEI / High Temp Plate' },
+  { value: 'Cool Plate', label: 'Smooth Cool Plate' },
+  { value: 'Textured Cool Plate', label: 'Textured Cool Plate' },
+  { value: 'Engineering Plate', label: 'Engineering Plate' },
+  { value: 'Supertack Plate', label: 'Cool Plate (SuperTack)' },
+];
 
 const store = new ProfileStore(PROFILES_DIR);
 const version = (() => {
@@ -71,6 +80,9 @@ function gcodeStats(file) {
     layers: Number(pick(/; total layer(?:s count| number)\s*[:=]\s*(\d+)/)) || null,
     material: pick(/; filament_type = (.+)/),
     color: pick(/; filament_colour = (.+)/),
+    bedType: pick(/; curr_bed_type = (.+)/),
+    bedTemp: Number(pick(/; first_layer_bed_temperature = (\d+)/)) || 0,
+    nozzleTemp: Number(pick(/; first_layer_temperature = (\d+)/)) || 0,
   };
 }
 
@@ -125,6 +137,10 @@ async function slice(req) {
     for (const [key, fn] of Object.entries(PROCESS_OVERRIDES)) {
       if (req.options && key in req.options) Object.assign(processCfg, fn(req.options[key]));
     }
+    // Without an explicit plate the CLI uses Cool Plate and its (low) bed temps.
+    const bedType = BED_TYPES.some((b) => b.value === req.bedType) ? req.bedType : store.defaultBedType(vendor, machine);
+    processCfg.curr_bed_type = bedType;
+    machineCfg.curr_bed_type = bedType;
     const write = (name, cfg) => { const p = path.join(dir, name); fs.writeFileSync(p, JSON.stringify(cfg)); return p; };
     const m = write('machine.json', machineCfg);
     const p = write('process.json', processCfg);
@@ -174,7 +190,9 @@ const server = http.createServer(async (req, res) => {
         machine,
         processes,
         filaments,
+        bedTypes: BED_TYPES,
         defaults: {
+          bedType: store.defaultBedType(vendor, machine),
           process: processes.find((n) => /^0\.20mm Standard/.test(n)) || processes[0] || null,
           filament: filaments.find((n) => /\bPLA\b/.test(n) && !/silk|matte|glow|high speed|hs|\+|cf|galaxy|metal|sparkle|luminous|color change/i.test(n)) || filaments[0] || null,
         },

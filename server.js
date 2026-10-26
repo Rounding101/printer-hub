@@ -139,6 +139,7 @@ async function sliceModel(item, printer, body) {
     filament: body.filament,
     copies,
     orient: !!body.orient,
+    bedType: body.bedType,
     options: body.options || {},
     paintInfo: printer.cfg.type === 'anycubic',
   }, 25 * 60 * 1000);
@@ -151,9 +152,12 @@ async function sliceModel(item, printer, body) {
       modelId: item.id,
       copies,
       slicedFor: printer.state.id,
-      sliceSettings: { process: body.process, filament: body.filament, options: body.options || {} },
+      sliceSettings: { process: body.process, filament: body.filament, bedType: result.stats.bedType, options: body.options || {} },
       grams: result.stats.grams,
       estimate: result.stats.time,
+      bedType: result.stats.bedType,
+      bedTemp: result.stats.bedTemp,
+      nozzleTemp: result.stats.nozzleTemp,
     });
   } finally {
     slicerCall('/cleanup', { id: result.id }).catch(() => {});

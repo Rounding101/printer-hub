@@ -53,6 +53,24 @@ class ProfileStore {
     return merged;
   }
 
+  // The plate type the GUI would pick: the printer model's default_bed_type.
+  // The CLI otherwise defaults to Cool Plate, whose filament bed temps are low
+  // (e.g. 35 °C for Anycubic PLA), so beds barely heat.
+  defaultBedType(vendor, machineName) {
+    const machine = this.resolve(vendor, 'machine', machineName);
+    const modelName = machine.printer_model;
+    const dir = path.join(this.dir, vendor, 'machine');
+    if (modelName && fs.existsSync(dir)) {
+      for (const f of walk(dir)) {
+        try {
+          const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+          if (j.type === 'machine_model' && j.name === modelName && j.default_bed_type) return j.default_bed_type;
+        } catch { /* skip */ }
+      }
+    }
+    return machine.default_bed_type || 'Textured PEI Plate';
+  }
+
   // Presets that list `machineName` in compatible_printers (or inherit a list that does).
   compatible(vendor, kind, machineName) {
     const out = [];

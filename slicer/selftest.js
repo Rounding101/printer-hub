@@ -27,7 +27,10 @@ function cubeStl(size = 20) {
     const filament = store.compatible(t.vendor, 'filament', t.machine).find((n) => /\bPLA\b/.test(n));
     const r = await slice({ input, ...t, process: process_, filament, copies: 2 });
     if (!(r.stats.grams > 0) || !r.stats.layers) throw new Error(`${t.machine}: sliced file has no stats`);
-    console.log(`selftest ok: ${t.machine} -> ${r.stats.layers} layers, ${r.stats.grams} g, ${r.stats.time}`);
+    // PLA on the default plate should heat the bed properly (a Cool Plate
+    // fallback gave 35 °C on the Kobra X).
+    if (!(r.stats.bedTemp >= 45)) throw new Error(`${t.machine}: bed only ${r.stats.bedTemp} °C on ${r.stats.bedType}`);
+    console.log(`selftest ok: ${t.machine} -> ${r.stats.layers} layers, ${r.stats.grams} g, ${r.stats.time}, bed ${r.stats.bedTemp} °C (${r.stats.bedType})`);
   }
   fs.rmSync(dataDir, { recursive: true, force: true });
 })().catch((err) => { console.error('selftest FAILED:', err.message); process.exit(1); });

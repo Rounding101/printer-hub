@@ -185,6 +185,7 @@ const STATIC = {
   '/jobs.js': ['public/jobs.js', 'text/javascript; charset=utf-8'],
   '/files.js': ['public/files.js', 'text/javascript; charset=utf-8'],
   '/preview.js': ['public/preview.js', 'text/javascript; charset=utf-8'],
+  '/control.js': ['public/control.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
   '/vendor/mpegts.js': ['node_modules/mpegts.js/dist/mpegts.js', 'text/javascript; charset=utf-8'],
 };
@@ -196,6 +197,8 @@ const ACTIONS = {
   resume: (p) => p.resume(),
   cancel: (p) => p.cancel(),
   light: (p, body) => p.setLight(!!body.on),
+  control: (p, body) => p.control(body),
+  slots: (p) => (p.refreshSlots ? p.refreshSlots() : p.state.slots),
   print: (p, body) => {
     if (!body.file) throw new Error('file is required');
     return p.startPrint(String(body.file), { mapping: body.mapping, autoLevel: body.autoLevel });

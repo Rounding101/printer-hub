@@ -86,6 +86,33 @@ Give both printers a DHCP reservation in your router so the IPs don't change.
   a start-camera command and plays the stream with mpegts.js. If the stream
   fails, it falls back to still snapshots.
 
+## Control panel
+
+**Controls** on a printer card opens `#control/<printer>`, a full-page view of
+that printer:
+
+- **Files:** upload only, or upload & print (models go to the slicer).
+  Browse printer files.
+- **Camera** at full size.
+- **Status:** progress, layer, time remaining, and the clock time it will
+  finish. Pause, resume, cancel, light, and motors off.
+- **Move:** XY jog pad, Z up/down, step size 0.1 / 1 / 10 / 50 mm, and home XY,
+  Z or all.
+- **Temperatures:** nozzle and bed targets (slider or number), plus PLA, PETG
+  and ABS preheat presets and Cool down. Max 280/110 °C on the AD5M and
+  300/120 °C on the Kobra X.
+- **Fans & speed:** part fan %. During a print: AD5M speed 50–150%, or the
+  Kobra X's Silent / Standard / Sport modes.
+- **Filament:** Kobra X ACE slots with color, type and remaining %.
+
+Safety: jog, home and motors off are refused while a print is running. The
+server enforces every limit, not just the UI.
+
+Protocols: the AD5M takes G-code over its TCP API (`G91`/`G1` jog, `G28`,
+`M104`/`M140`, `M106`, `M18`) and `printerCtl_cmd` for speed. The Kobra X takes
+MQTT `axis/move`, `axis/turnOff`, `tempature/set`, `fan/setSpeed` and
+`print/update`.
+
 ## Files: library, uploads and starting prints
 
 - **Library tab:** drop `.gcode`, `.gx`, `.3mf` or `.bgcode` files (up to 512 MB)

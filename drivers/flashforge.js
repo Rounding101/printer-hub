@@ -37,12 +37,14 @@ class FlashForgeDriver extends PrinterDriver {
     super(cfg, opts);
     this.mode = cfg.checkCode && cfg.serialNumber ? 'http' : 'tcp';
     this.detail = null;
+    this.limits = { nozzle: 280, bed: 110, jog: 100 };
     this.state.capabilities = {
       pause: true,
       resume: true,
       cancel: true,
       light: this.mode === 'http',
       files: this.mode === 'http',
+      control: { jog: true, home: true, motorsOff: true, temps: ['nozzle', 'bed'], fans: ['part'], speed: this.mode === 'http' ? 'percent' : null, limits: this.limits },
     };
   }
 
@@ -93,6 +95,13 @@ class FlashForgeDriver extends PrinterDriver {
         bed: { cur: d.platTemp || 0, target: d.platTargetTemp || 0 },
         ...(d.chamberTemp ? { chamber: { cur: d.chamberTemp, target: d.chamberTargetTemp || 0 } } : {}),
       },
+      fans: {
+        part: d.coolingFanSpeed ?? null,
+        ...(d.chamberFanSpeed ? { chamber: d.chamberFanSpeed } : {}),
+      },
+      speed: ['printing', 'pausing', 'paused'].includes(status) && d.printSpeedAdjust != null
+        ? { kind: 'percent', value: d.printSpeedAdjust, min: 50, max: 150 }
+        : null,
       job: hasJob ? {
         file: d.printFileName,
         progress: Math.round((d.printProgress || 0) * 1000) / 10,
@@ -105,7 +114,7 @@ class FlashForgeDriver extends PrinterDriver {
     });
   }
 
-  async control(cmd, args) {
+  async httpControl(cmd, args) {
     if (this.mode !== 'http') throw new Error('Needs serialNumber + checkCode in config for this command');
     await this.post('/control', { payload: { cmd, args } });
   }
@@ -177,22 +186,57 @@ class FlashForgeDriver extends PrinterDriver {
   // ---- Commands ------------------------------------------------------------
 
   async pause() {
-    if (this.mode === 'http') return this.control('jobCtl_cmd', { jobID: '', action: 'pause' });
+    if (this.mode === 'http') return this.httpControl('jobCtl_cmd', { jobID: '', action: 'pause' });
     await this.tcp(['~M25']);
   }
 
   async resume() {
-    if (this.mode === 'http') return this.control('jobCtl_cmd', { jobID: '', action: 'continue' });
+    if (this.mode === 'http') return this.httpControl('jobCtl_cmd', { jobID: '', action: 'continue' });
     await this.tcp(['~M24']);
   }
 
   async cancel() {
-    if (this.mode === 'http') return this.control('jobCtl_cmd', { jobID: '', action: 'cancel' });
+    if (this.mode === 'http') return this.httpControl('jobCtl_cmd', { jobID: '', action: 'cancel' });
     await this.tcp(['~M26']);
   }
 
+  // Motion, temperatures and fans go over the G-code TCP API (the AD5M runs
+  // Klipper underneath, so standard G-code applies). Print speed uses the HTTP
+  // API's printerCtl_cmd, which also carries the current fan/Z-offset values.
+  async control(raw) {
+    const cmd = this.validateControl(raw);
+    switch (cmd.action) {
+      case 'jog': {
+        const feed = cmd.axis === 'z' ? 600 : 3000;
+        return this.tcp(['~G91', `~G1 ${cmd.axis.toUpperCase()}${cmd.distance} F${feed}`, '~G90']);
+      }
+      case 'home':
+        return this.tcp([cmd.axes === 'xyz' ? '~G28' : `~G28 ${cmd.axes.toUpperCase().split('').join(' ')}`]);
+      case 'motorsOff':
+        return this.tcp(['~M18']);
+      case 'temp':
+        return this.tcp([cmd.heater === 'nozzle' ? `~M104 S${cmd.target} T0` : `~M140 S${cmd.target}`]);
+      case 'fan':
+        return this.tcp([cmd.pct > 0 ? `~M106 S${Math.round((cmd.pct / 100) * 255)}` : '~M107']);
+      case 'speed': {
+        if (this.mode !== 'http') throw new Error('Speed control needs serialNumber + checkCode');
+        const d = this.detail || {};
+        const speed = Math.max(50, Math.min(150, Math.round(Number(cmd.value))));
+        return this.httpControl('printerCtl_cmd', {
+          zAxisCompensation: d.zAxisCompensation ?? 0,
+          speed,
+          chamberFan: d.chamberFanSpeed ?? 0,
+          coolingFan: d.coolingFanSpeed ?? 0,
+          coolingLeftFan: 0,
+        });
+      }
+      default:
+        throw new Error('Unsupported');
+    }
+  }
+
   async setLight(on) {
-    await this.control('lightControl_cmd', { status: on ? 'open' : 'close' });
+    await this.httpControl('lightControl_cmd', { status: on ? 'open' : 'close' });
   }
 
   async listFiles() {

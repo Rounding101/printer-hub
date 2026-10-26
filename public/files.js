@@ -81,14 +81,17 @@ const Files = (() => {
     });
   }
 
-  async function uploadToPrinter(file) {
+  // Uploads to a printer (kept in the library too). From the files dialog by
+  // default; the control view passes its own printer, progress bar and mode.
+  async function uploadToPrinter(file, printerId = filesFor, opts = {}) {
     const dlg = $('files-dlg');
-    const printerId = filesFor;
+    const progressEl = opts.progressEl || dlg.querySelector('.progress');
+    const printAfter = opts.print ?? dlg.querySelector('.upload-print').checked;
     try {
-      const res = await upload(`/api/printers/${enc(printerId)}/upload?name=${enc(file.name)}`, file, dlg.querySelector('.progress'));
+      const res = await upload(`/api/printers/${enc(printerId)}/upload?name=${enc(file.name)}`, file, progressEl);
       if (res.model) {
         // Models can't be printed directly: slice for this printer first.
-        dlg.close();
+        if (dlg.open) dlg.close();
         const item = library.find((i) => i.id === res.libraryId) || { id: res.libraryId, name: res.file };
         lastSlice.printerId = printerId;
         toast(`${res.file} is a model. Saved to the library; slice it to print.`);
@@ -96,10 +99,10 @@ const Files = (() => {
         return;
       }
       toast(`Sent ${res.file} to ${printerName(printerId)}`);
-      if (dlg.querySelector('.upload-print').checked) {
-        dlg.close();
+      if (printAfter) {
+        if (dlg.open) dlg.close();
         openPrint(printerId, res.file);
-      } else {
+      } else if (dlg.open) {
         loadPrinterFiles();
       }
     } catch (err) {
@@ -510,5 +513,5 @@ const Files = (() => {
 
   function setLibrary(items) { library = items; renderLibrary(); }
 
-  return { openPrinterFiles, openPrint, setLibrary, renderLibrary };
+  return { openPrinterFiles, openPrint, setLibrary, renderLibrary, uploadToPrinter };
 })();

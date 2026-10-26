@@ -25,6 +25,107 @@
 
   <main id="grid" class="grid view" data-view="printers" aria-live="polite"></main>
 
+  <section class="view ctl" data-view="control" hidden>
+    <div class="ctl-top">
+      <aside class="panel ctl-files">
+        <label class="ctl-pick-label">Printer <select id="ctl-printer"></select></label>
+        <div class="seg seg-full" role="radiogroup" aria-label="Upload mode">
+          <button type="button" role="radio" data-mode="upload" aria-checked="true">Upload only</button>
+          <button type="button" role="radio" data-mode="print" aria-checked="false">Upload &amp; print</button>
+        </div>
+        <label class="dropzone small" id="ctl-drop">
+          <input type="file" id="ctl-file" accept=".gcode,.gx,.3mf,.bgcode,.stl,.obj,.step,.stp,.amf" hidden>
+          <strong>Drop a file</strong> or click to choose
+          <span class="dlg-hint">.gcode, .3mf, .bgcode, or a model to slice</span>
+        </label>
+        <div class="progress" id="ctl-progress" hidden><div class="progress-fill"></div><span class="progress-text"></span></div>
+        <button type="button" class="btn" id="ctl-browse">Browse printer files…</button>
+        <a class="btn ghost" href="#library">Open library</a>
+      </aside>
+      <div class="ctl-cam-wrap">
+        <div class="cam ctl-cam">
+          <div class="cam-empty">No camera</div>
+          <button class="cam-full" type="button" title="Fullscreen" aria-label="Fullscreen camera">⤢</button>
+        </div>
+      </div>
+      <aside class="panel ctl-status">
+        <div class="head">
+          <h2 class="name" id="ctl-name"></h2>
+          <span class="pill" id="ctl-pill"></span>
+        </div>
+        <p class="file" id="ctl-file-name"></p>
+        <div class="bar"><div class="fill" id="ctl-fill"></div></div>
+        <dl class="ctl-facts">
+          <div><dt>Progress</dt><dd id="ctl-pct">—</dd></div>
+          <div><dt>Layer</dt><dd id="ctl-layer">—</dd></div>
+          <div><dt>Remaining</dt><dd id="ctl-remaining">—</dd></div>
+          <div><dt>Finishes</dt><dd id="ctl-eta">—</dd></div>
+        </dl>
+        <div class="actions" id="ctl-actions">
+          <button class="btn" data-act="pause" type="button">Pause</button>
+          <button class="btn primary" data-act="resume" type="button">Resume</button>
+          <button class="btn danger" data-act="cancel" type="button">Cancel</button>
+          <button class="btn ghost" data-act="light" type="button">Light</button>
+          <button class="btn ghost" data-act="motorsOff" type="button" title="Disable stepper motors">Motors off</button>
+        </div>
+        <p class="err" id="ctl-err" hidden></p>
+      </aside>
+    </div>
+
+    <div class="ctl-bottom">
+      <section class="panel ctl-motion" aria-labelledby="ctl-motion-h">
+        <div class="panel-head"><h3 id="ctl-motion-h">Move</h3>
+          <div class="seg" role="radiogroup" aria-label="Step size" id="ctl-step">
+            <button type="button" role="radio" data-step="0.1" aria-checked="false">0.1</button>
+            <button type="button" role="radio" data-step="1" aria-checked="false">1</button>
+            <button type="button" role="radio" data-step="10" aria-checked="true">10</button>
+            <button type="button" role="radio" data-step="50" aria-checked="false">50</button>
+          </div>
+        </div>
+        <div class="motion-grid">
+          <svg class="jog" viewBox="0 0 200 200" role="group" aria-label="XY jog">
+            <g class="wedge" data-axis="y" data-dir="1" role="button" tabindex="0" aria-label="Y plus"><path d="M100 100 L29.3 29.3 A100 100 0 0 1 170.7 29.3 Z"/><text x="100" y="32">Y+</text></g>
+            <g class="wedge" data-axis="x" data-dir="1" role="button" tabindex="0" aria-label="X plus"><path d="M100 100 L170.7 29.3 A100 100 0 0 1 170.7 170.7 Z"/><text x="172" y="104">X+</text></g>
+            <g class="wedge" data-axis="y" data-dir="-1" role="button" tabindex="0" aria-label="Y minus"><path d="M100 100 L170.7 170.7 A100 100 0 0 1 29.3 170.7 Z"/><text x="100" y="178">Y−</text></g>
+            <g class="wedge" data-axis="x" data-dir="-1" role="button" tabindex="0" aria-label="X minus"><path d="M100 100 L29.3 170.7 A100 100 0 0 1 29.3 29.3 Z"/><text x="28" y="104">X−</text></g>
+            <g class="hub" data-home="xy" role="button" tabindex="0" aria-label="Home X and Y"><circle cx="100" cy="100" r="30"/><text x="100" y="105">⌂ XY</text></g>
+          </svg>
+          <div class="z-col" role="group" aria-label="Z jog">
+            <button class="btn" type="button" data-z="1" aria-label="Z up">Z+</button>
+            <button class="btn" type="button" data-home="z">⌂ Z</button>
+            <button class="btn" type="button" data-z="-1" aria-label="Z down">Z−</button>
+          </div>
+          <div class="home-col">
+            <button class="btn" type="button" data-home="xyz">⌂ Home all</button>
+          </div>
+        </div>
+        <p class="dlg-hint" id="ctl-motion-note"></p>
+      </section>
+
+      <section class="panel ctl-thermal" aria-labelledby="ctl-temps-h">
+        <div class="panel-head"><h3 id="ctl-temps-h">Temperatures</h3>
+          <div class="presets" id="ctl-presets">
+            <button class="btn small" type="button" data-preset="210,60">PLA</button>
+            <button class="btn small" type="button" data-preset="240,80">PETG</button>
+            <button class="btn small" type="button" data-preset="255,100">ABS</button>
+            <button class="btn small ghost" type="button" data-preset="0,0">Cool down</button>
+          </div>
+        </div>
+        <div id="ctl-temps"></div>
+        <h3 class="sub-h">Fans &amp; speed</h3>
+        <div id="ctl-fans"></div>
+        <div id="ctl-speed"></div>
+      </section>
+
+      <section class="panel ctl-filament" aria-labelledby="ctl-fil-h">
+        <div class="panel-head"><h3 id="ctl-fil-h">Filament</h3>
+          <button class="btn small ghost" type="button" id="ctl-slots-refresh">Refresh</button>
+        </div>
+        <div id="ctl-slots"></div>
+      </section>
+    </div>
+  </section>
+
   <section class="view page" data-view="library" hidden>
     <div class="dropzone" id="lib-drop">
       <p><strong>Drop files here</strong> or
@@ -143,6 +244,7 @@
           <button class="btn act-cancel danger" type="button">Cancel</button>
           <button class="btn act-print primary" type="button">Start print…</button>
           <button class="btn act-light ghost" type="button">Light</button>
+          <a class="btn ghost act-controls" href="#">Controls</a>
         </div>
       </div>
     </article>
@@ -265,6 +367,7 @@
   <script src="/vendor/mpegts.js"></script>
   <script src="/jobs.js"></script>
   <script src="/files.js"></script>
+  <script src="/control.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

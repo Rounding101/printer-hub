@@ -39,13 +39,22 @@ async function api(path, opts = {}) {
 
 // ---- Camera ---------------------------------------------------------------------
 
+// Removing an <img> doesn't end its MJPEG download; blank the source first, or
+// leaked streams pile up until the browser's per-host connection limit stalls
+// every other request to the hub.
+function stopMedia(el) {
+  if (el.tagName === 'IMG') { el.onload = el.onerror = null; el.src = 'data:,'; }
+  else if (el.tagName === 'VIDEO') { el.removeAttribute('src'); el.load(); }
+  el.remove();
+}
+
 function mountCamera(card) {
   const { el, state } = card;
   const cam = el.querySelector('.cam');
   if (card.camKind === state.camera) return;
   card.player?.destroy();
   card.player = null;
-  cam.querySelectorAll('img, video').forEach((n) => n.remove());
+  cam.querySelectorAll('img, video').forEach(stopMedia);
   cam.classList.remove('has-feed');
   card.camKind = state.camera;
   if (!state.camera) return;
@@ -76,7 +85,7 @@ function mountCamera(card) {
 function fallbackSnapshots(card) {
   const cam = card.el.querySelector('.cam');
   card.player?.destroy();
-  cam.querySelectorAll('img, video').forEach((n) => n.remove());
+  cam.querySelectorAll('img, video').forEach(stopMedia);
   cam.classList.remove('has-feed');
   const img = new Image();
   img.alt = `${card.state.name} camera snapshot`;
@@ -117,10 +126,13 @@ function createCard(state) {
   q('.act-print').onclick = () => Files.openPrinterFiles(card.state.id);
   q('.cam-full').onclick = () => q('.cam').requestFullscreen?.();
 
+  q('.act-controls').href = `#control/${id}`;
+
   cards.set(state.id, card);
   grid.append(el);
   Jobs.syncPrinters();
   Files.renderLibrary();
+  if (pendingControl === state.id) { pendingControl = null; setTimeout(() => Control.open(state.id)); }
   return card;
 }
 
@@ -177,7 +189,10 @@ function render(state) {
   q('.act-light').setAttribute('aria-pressed', String(!!state.light));
   q('.act-light').textContent = state.light ? 'Light on' : 'Light off';
 
-  mountCamera(card);
+  // The dashboard and control view each hold a camera stream; only run the visible one.
+  if (document.querySelector('.view[data-view="control"]').hidden) mountCamera(card);
+  else { card.player?.destroy(); card.player = null; card.camKind = undefined; card.el.querySelectorAll('.cam img, .cam video').forEach(stopMedia); }
+  Control.onState(state);
   updateSummary();
   const key = `${state.online}:${state.status}`;
   if (card.statusKey !== key) { card.statusKey = key; Files.renderLibrary(); }
@@ -207,13 +222,21 @@ function confirmCancel(card, go) {
 // ---- Views ----------------------------------------------------------------------
 
 function showView() {
-  const view = (location.hash.slice(1) || 'printers');
-  const known = ['printers', 'library', 'jobs', 'totals'].includes(view) ? view : 'printers';
+  const [view, arg] = (location.hash.slice(1) || 'printers').split('/');
+  const known = ['printers', 'control', 'library', 'jobs', 'totals'].includes(view) ? view : 'printers';
+  if (known === 'control') {
+    // Printers arrive over SSE; open once the card exists.
+    const id = decodeURIComponent(arg || '');
+    if (cards.has(id)) Control.open(id); else pendingControl = id;
+  } else {
+    Control.close();
+  }
+  document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === (known === 'control' ? 'printers' : known) ? 'page' : 'false'));
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
   document.querySelectorAll('[data-sub]').forEach((el) => { el.hidden = el.dataset.sub !== known; });
-  document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === known ? 'page' : 'false'));
-  if (known !== 'printers') Jobs.render();
+  if (known === 'jobs' || known === 'totals') Jobs.render();
 }
+let pendingControl = null;
 window.addEventListener('hashchange', showView);
 showView();
 

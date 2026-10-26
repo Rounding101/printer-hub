@@ -59,6 +59,20 @@ async function handshake(host) {
   };
 }
 
+const SPEED_MODES = [{ value: 1, label: 'Silent' }, { value: 2, label: 'Standard' }, { value: 3, label: 'Sport' }];
+
+const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] != null).map((k) => [k, o[k]]));
+
+function slotsFrom(boxes) {
+  return boxes.flatMap((b, bi) => (b.slots || []).map((s) => ({
+    index: bi * 4 + s.index,
+    color: (s.color || [0, 0, 0]).slice(0, 3),
+    type: s.type || '',
+    ready: s.status === 5,
+    percent: s.consumables_percent ?? null,
+  })));
+}
+
 function mapStatus(infoState, project) {
   const ps = project?.state?.toLowerCase();
   if (ps === 'printing') {
@@ -84,6 +98,13 @@ class AnycubicDriver extends PrinterDriver {
     this.info = {};
     this.project = null;
     this.light = null;
+    this.slots = null;
+    this.pollCount = 0;
+    this.limits = { nozzle: 300, bed: 120, jog: 100 };
+    this.state.capabilities.control = {
+      jog: true, home: true, motorsOff: true, temps: ['nozzle', 'bed'], fans: ['part'],
+      speed: 'mode', limits: this.limits,
+    };
     // Replies carry their own msgid (after an empty ack echoing ours), so we
     // match pending requests by "type:action" instead.
     this.pending = new Map();
@@ -157,6 +178,10 @@ class AnycubicDriver extends PrinterDriver {
     try {
       this.publish('web', 'info', 'query', null);
       this.publish('web', 'light', 'query', null);
+      // Filament slots change rarely; refresh them about every 30 seconds.
+      if (this.pollCount++ % Math.max(1, Math.round(30000 / Math.max(this.pollIntervalMs, 2000))) === 0) {
+        this.publish('web', 'multiColorBox', 'getInfo', null);
+      }
     } catch { /* reconnect handled elsewhere */ }
   }
 
@@ -183,7 +208,11 @@ class AnycubicDriver extends PrinterDriver {
     } else if (type === 'print' && d && (d.filename || d.progress != null)) {
       this.project = { ...(this.project || {}), ...d, state: d.state || msg.state || this.project?.state };
     } else if (type === 'tempature') {
-      this.info = { ...this.info, temp: d };
+      if (d.curr_nozzle_temp != null || d.curr_hotbed_temp != null) this.info = { ...this.info, temp: { ...(this.info.temp || {}), ...d } };
+    } else if (type === 'fan') {
+      this.info = { ...this.info, ...pick(d, ['fan_speed_pct', 'aux_fan_speed_pct', 'box_fan_level']) };
+    } else if (type === 'multiColorBox' && Array.isArray(d.multi_color_box)) {
+      this.slots = slotsFrom(d.multi_color_box);
     } else {
       return;
     }
@@ -203,6 +232,14 @@ class AnycubicDriver extends PrinterDriver {
       firmware: this.info.version || null,
       camera: this.cameraUrl() ? 'flv' : null,
       light: this.light,
+      fans: {
+        part: this.info.fan_speed_pct ?? null,
+        ...(this.info.aux_fan_speed_pct != null ? { aux: this.info.aux_fan_speed_pct } : {}),
+      },
+      speed: ['printing', 'pausing', 'paused'].includes(status)
+        ? { kind: 'mode', value: p?.print_speed_mode ?? this.info.print_speed_mode ?? 2, options: SPEED_MODES }
+        : null,
+      slots: this.slots,
       temps: {
         nozzle: { cur: t.curr_nozzle_temp ?? 0, target: t.target_nozzle_temp ?? 0 },
         bed: { cur: t.curr_hotbed_temp ?? 0, target: t.target_hotbed_temp ?? 0 },
@@ -241,6 +278,50 @@ class AnycubicDriver extends PrinterDriver {
   async pause() { this.publish('web', 'print', 'pause', { taskid: this.taskId() }); }
   async resume() { this.publish('web', 'print', 'resume', { taskid: this.taskId() }); }
   async cancel() { this.publish('web', 'print', 'stop', { taskid: this.taskId() }); }
+
+  // Commands per the Kobra X LAN protocol (see stribor/anycubic_kobrax):
+  // axis/move {axis 1=X 2=Y 3=Z, move_type 1=+ 0=- 2=home (axis 4=XY 3=Z 5=XYZ), distance}.
+  async control(raw) {
+    const cmd = this.validateControl(raw);
+    switch (cmd.action) {
+      case 'jog':
+        return this.publish('web', 'axis', 'move', {
+          axis: { x: 1, y: 2, z: 3 }[cmd.axis],
+          move_type: cmd.distance > 0 ? 1 : 0,
+          distance: Math.abs(cmd.distance),
+        });
+      case 'home':
+        return this.publish('web', 'axis', 'move', { axis: { xy: 4, z: 3, xyz: 5 }[cmd.axes], move_type: 2, distance: 0 });
+      case 'motorsOff':
+        return this.publish('web', 'axis', 'turnOff', null);
+      case 'temp': {
+        const t = this.info.temp || {};
+        const nozzle = cmd.heater === 'nozzle' ? cmd.target : (t.target_nozzle_temp ?? 0);
+        const bed = cmd.heater === 'bed' ? cmd.target : (t.target_hotbed_temp ?? 0);
+        this.publish('web', 'tempature', 'set', { type: cmd.heater === 'nozzle' ? 0 : 1, target_hotbed_temp: bed, target_nozzle_temp: nozzle });
+        this.info = { ...this.info, temp: { ...t, target_nozzle_temp: nozzle, target_hotbed_temp: bed } };
+        return this.render();
+      }
+      case 'fan':
+        this.publish('web', 'fan', 'setSpeed', { fan_speed_pct: cmd.pct });
+        this.info = { ...this.info, fan_speed_pct: cmd.pct };
+        return this.render();
+      case 'speed': {
+        const mode = Number(cmd.value);
+        if (!SPEED_MODES.some((m) => m.value === mode)) throw new Error('Unknown speed mode');
+        return this.publish('web', 'print', 'update', { taskid: this.taskId(), settings: { print_speed_mode: mode } });
+      }
+      default:
+        throw new Error('Unsupported');
+    }
+  }
+
+  async refreshSlots() {
+    const msg = await this.request('multiColorBox', 'getInfo', null);
+    this.slots = slotsFrom(msg.data?.multi_color_box || []);
+    this.render();
+    return this.slots;
+  }
 
   async setLight(on) {
     await this.request('light', 'control', { type: 3, status: on ? 1 : 0, brightness: on ? 100 : 0 });

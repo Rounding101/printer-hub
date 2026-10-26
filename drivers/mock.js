@@ -6,7 +6,12 @@ const FILES = ['benchy.gcode', 'calibration_cube.gcode', 'phone_stand.3mf', 'cab
 class MockDriver extends PrinterDriver {
   constructor(cfg, opts) {
     super(cfg, opts);
-    this.state.capabilities = { pause: true, resume: true, cancel: true, light: true, files: true };
+    this.limits = { nozzle: 300, bed: 110, jog: 100 };
+    this.state.capabilities = {
+      pause: true, resume: true, cancel: true, light: true, files: true,
+      control: { jog: true, home: true, motorsOff: true, temps: ['nozzle', 'bed'], fans: ['part'], speed: cfg.multiColor ? 'mode' : 'percent', limits: this.limits },
+    };
+    this.manual = { nozzle: 0, bed: 0, fan: 0, speed: cfg.multiColor ? 2 : 100, pos: { x: 110, y: 110, z: 10 } };
     this.files = [...FILES];
     this.sim = { status: 'idle', progress: 0, file: null, light: true, nozzle: 24, bed: 23 };
     if (cfg.startPrinting) Object.assign(this.sim, { status: 'printing', progress: 37, file: FILES[0], nozzle: 220, bed: 60 });
@@ -23,8 +28,10 @@ class MockDriver extends PrinterDriver {
     const s = this.sim;
     const hot = ['printing', 'paused', 'heating'].includes(s.status);
     const approach = (cur, target) => cur + (target - cur) * 0.15 + (Math.random() - 0.5) * 0.6;
-    s.nozzle = approach(s.nozzle, hot ? 220 : 24);
-    s.bed = approach(s.bed, hot ? 60 : 23);
+    const nozzleTarget = hot ? 220 : this.manual.nozzle;
+    const bedTarget = hot ? 60 : this.manual.bed;
+    s.nozzle = approach(s.nozzle, nozzleTarget || 24);
+    s.bed = approach(s.bed, bedTarget || 23);
     if (s.status === 'heating' && s.nozzle > 210) s.status = 'printing';
     if (s.status === 'printing') {
       s.progress = Math.min(100, s.progress + 0.4 * (this.cfg.speed || 1));
@@ -40,9 +47,21 @@ class MockDriver extends PrinterDriver {
       light: s.light,
       camera: 'mjpeg',
       temps: {
-        nozzle: { cur: s.nozzle, target: hot ? 220 : 0 },
-        bed: { cur: s.bed, target: hot ? 60 : 0 },
+        nozzle: { cur: s.nozzle, target: nozzleTarget },
+        bed: { cur: s.bed, target: bedTarget },
       },
+      fans: { part: hot ? Math.max(this.manual.fan, 100) : this.manual.fan },
+      speed: ['printing', 'paused'].includes(s.status)
+        ? (this.cfg.multiColor
+          ? { kind: 'mode', value: this.manual.speed, options: [{ value: 1, label: 'Silent' }, { value: 2, label: 'Standard' }, { value: 3, label: 'Sport' }] }
+          : { kind: 'percent', value: this.manual.speed, min: 50, max: 150 })
+        : null,
+      slots: this.cfg.multiColor ? [
+        { index: 0, color: [241, 240, 237], type: 'PLA High Speed', ready: true, percent: 100 },
+        { index: 1, color: [239, 96, 163], type: 'PLA Matte', ready: true, percent: 72 },
+        { index: 2, color: [255, 194, 244], type: 'PLA Matte', ready: false, percent: null },
+        { index: 3, color: [158, 166, 180], type: 'PLA+', ready: true, percent: 35 },
+      ] : null,
       job: s.file && s.status !== 'idle' ? {
         file: s.file,
         progress: Math.round(s.progress * 10) / 10,
@@ -78,6 +97,18 @@ class MockDriver extends PrinterDriver {
     Object.assign(this.sim, { status: 'heating', file, progress: 0 });
     this.tick();
   }
+  async control(raw) {
+    const cmd = this.validateControl(raw);
+    const m = this.manual;
+    if (cmd.action === 'jog') m.pos[cmd.axis] = Math.round((m.pos[cmd.axis] + cmd.distance) * 10) / 10;
+    if (cmd.action === 'home') for (const a of cmd.axes) m.pos[a] = 0;
+    if (cmd.action === 'temp') m[cmd.heater] = cmd.target;
+    if (cmd.action === 'fan') m.fan = cmd.pct;
+    if (cmd.action === 'speed') m.speed = Number(cmd.value);
+    this.lastControl = cmd;
+    this.tick();
+  }
+
   async upload(name, data) {
     if (!data.length) throw new Error('Empty file');
     if (!this.files.includes(name)) this.files.unshift(name);

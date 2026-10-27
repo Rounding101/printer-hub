@@ -109,6 +109,7 @@ class FlashForgeDriver extends PrinterDriver {
         totalLayers: d.targetPrintLayer || 0,
         elapsed: d.printDuration || 0,
         remaining: d.estimatedTime || 0,
+        grams: d.estimatedRightWeight || d.estimatedLeftWeight || null, // slicer's filament estimate for the job
         thumb: !!d.printFileThumbUrl,
       } : null,
     });

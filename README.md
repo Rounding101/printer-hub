@@ -103,7 +103,29 @@ that printer:
   300/120 °C on the Kobra X.
 - **Fans & speed:** part fan %. During a print: AD5M speed 50–150%, or the
   Kobra X's Silent / Standard / Sport modes.
-- **Filament:** Kobra X ACE slots with color, type and remaining %.
+- **Filament:** each Kobra X ACE slot, or the AD5M's single spool, shows a
+  hub-tracked roll. See below.
+
+### Filament rolls
+
+The printers don't really measure what's left (the Kobra X reports 100% for
+every slot), so the hub tracks rolls itself:
+
+- **New roll** on a slot records a roll's size (1 kg by default), material and
+  color. For a part-used roll, enter how many grams are left.
+- Each print's filament is charged to the slot(s) it used:
+  - Kobra X prints started from the hub: the file's per-color grams and the
+    slot mapping you chose.
+  - Kobra X prints started elsewhere: the file's per-color grams, with the
+    slots guessed the same way the print dialog suggests them.
+  - AD5M: the file's weight from the library, or the printer's own estimate.
+
+  Cancelled or failed prints are charged by how far they got.
+- Remaining = the roll's starting weight minus the filament charged since. It's
+  recalculated from the job log, so fixing a job's outcome corrects the roll.
+- **Adjust** sets the remaining grams after weighing a roll (subtract the empty
+  spool, usually 200–250 g). Rolls are stored in `data/spools.json`.
+- The job log and Totals gain a Filament column, and the CSV gets `filament_g`.
 
 Safety: jog, home and motors off are refused while a print is running. The
 server enforces every limit, not just the UI.

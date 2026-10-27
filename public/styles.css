@@ -358,6 +358,18 @@ select.small { padding: 4px 8px; font-size: 13px; max-width: 150px; }
 .spool.empty .spool-color { background: repeating-linear-gradient(45deg, var(--surface-2) 0 4px, var(--border) 4px 8px) !important; }
 .spool-type { font-size: 13px; font-weight: 600; }
 .spool-meta { font-size: 12px; color: var(--muted); }
+#ctl-slots { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.spool-bar { width: 100%; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; margin-top: 2px; }
+.spool-bar > div { height: 100%; background: var(--ok); border-radius: 3px; }
+.spool.low .spool-bar > div { background: var(--danger); }
+.spool.low .spool-left { color: var(--danger); }
+.spool-left { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 1em; }
+.spool-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+.spool-actions .btn { padding: 3px 8px; font-size: 12px; }
+.dlg-actions .grow { flex: 1; }
+.rd-new, .rd-adjust { display: flex; flex-direction: column; gap: 12px; }
+.rd-new[hidden], .rd-adjust[hidden] { display: none; }
+input[type="color"] { padding: 2px; height: 36px; width: 100%; cursor: pointer; }
 
 @media (max-width: 1200px) {
   .ctl-top { grid-template-columns: minmax(0, 1fr) 300px; }

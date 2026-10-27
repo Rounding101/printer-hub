@@ -83,6 +83,9 @@ const Jobs = (() => {
       cell(tr, qty, 'num');
 
       cell(tr, j.printSeconds ? dur(j.printSeconds) : '—', 'num nowrap');
+      const fil = cell(tr, j.grams != null ? `${Math.round(j.grams)} g` : j.filamentPlan ? `~${Math.round(j.filamentPlan.reduce((n, p) => n + p.grams, 0))} g` : '—', 'num nowrap');
+      const slotsUsed = (j.filament || j.filamentPlan || []).map((p) => (p.slot == null ? `unassigned ${Math.round(p.grams)} g` : `slot ${p.slot + 1}: ${Math.round(p.grams)} g`));
+      fil.title = slotsUsed.length ? `${j.filament ? 'Used' : 'Planned'}: ${slotsUsed.join(', ')}` : 'No filament estimate for this job';
 
       const actions = document.createElement('div');
       actions.className = 'row-actions';
@@ -105,12 +108,12 @@ const Jobs = (() => {
   function renderTotals(list) {
     const groups = new Map();
     for (const j of list) {
-      const g = groups.get(key(j)) || { item: j.item, items: 0, plates: 0, secs: 0, bad: 0, last: null, qtys: new Set() };
+      const g = groups.get(key(j)) || { item: j.item, items: 0, plates: 0, secs: 0, grams: 0, bad: 0, last: null, qtys: new Set() };
       if (j.outcome === 'completed') {
-        g.items += j.quantity; g.plates += 1; g.secs += j.printSeconds || 0; g.qtys.add(j.quantity);
+        g.items += j.quantity; g.plates += 1; g.secs += j.printSeconds || 0; g.grams += j.grams || 0; g.qtys.add(j.quantity);
         if (!g.last || j.startedAt > g.last.startedAt) g.last = j;
       } else if (j.outcome === 'failed' || j.outcome === 'cancelled') {
-        g.bad += 1; g.secs += j.printSeconds || 0;
+        g.bad += 1; g.secs += j.printSeconds || 0; g.grams += j.grams || 0;
       }
       groups.set(key(j), g);
     }
@@ -122,6 +125,7 @@ const Jobs = (() => {
       cell(tr, g.plates.toLocaleString(), 'num');
       cell(tr, [...g.qtys].sort((a, b) => a - b).join(', ') || '—', 'num');
       cell(tr, hours(g.secs), 'num');
+      cell(tr, g.grams ? `${g.grams >= 1000 ? `${(g.grams / 1000).toFixed(2)} kg` : `${Math.round(g.grams)} g`}` : '—', 'num nowrap');
       cell(tr, g.bad || '—', 'num');
       cell(tr, g.last ? fmtDay(g.last.startedAt) : '—', 'nowrap');
       cell(tr, g.last && !g.last.manual ? reprintButton(g.last.printerId, g.last.file) : '', 'actions');

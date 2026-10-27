@@ -193,7 +193,7 @@
 
     <div class="table-wrap" data-sub="jobs">
       <table class="table">
-        <thead><tr><th>Started</th><th>Printer</th><th>Item</th><th>Outcome</th><th class="num">Items / plate</th><th class="num">Print time</th><th></th></tr></thead>
+        <thead><tr><th>Started</th><th>Printer</th><th>Item</th><th>Outcome</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Filament</th><th></th></tr></thead>
         <tbody id="jobs-body"></tbody>
       </table>
       <p class="table-empty" id="jobs-empty">No jobs yet. Prints are logged automatically while the hub is running.</p>
@@ -201,7 +201,7 @@
 
     <div class="table-wrap" data-sub="totals">
       <table class="table">
-        <thead><tr><th>Item</th><th class="num">Items</th><th class="num">Plates</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Failed / cancelled</th><th>Last printed</th><th></th></tr></thead>
+        <thead><tr><th>Item</th><th class="num">Items</th><th class="num">Plates</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Filament</th><th class="num">Failed / cancelled</th><th>Last printed</th><th></th></tr></thead>
         <tbody id="totals-body"></tbody>
       </table>
       <p class="table-empty" id="totals-empty">Nothing printed in this period.</p>
@@ -345,6 +345,43 @@
       <div class="dlg-actions">
         <button class="btn ghost sd-close" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary sd-go" type="button">Slice</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="roll-dlg">
+    <form method="dialog" class="dlg form">
+      <h3 class="rd-title">New roll</h3>
+      <p class="dlg-hint rd-hint"></p>
+      <div class="rd-new">
+        <div class="form-row">
+          <label>Roll size
+            <select name="capacity">
+              <option value="1000">1 kg</option>
+              <option value="750">750 g</option>
+              <option value="500">500 g</option>
+              <option value="250">250 g</option>
+              <option value="2000">2 kg</option>
+              <option value="3000">3 kg</option>
+            </select>
+          </label>
+          <label>Filament left (g) <input name="remaining" type="number" min="0" max="10000" placeholder="Full roll"></label>
+        </div>
+        <div class="form-row">
+          <label>Material <input name="material" maxlength="40" placeholder="PLA"></label>
+          <label>Color <input name="color" type="color" value="#cccccc"></label>
+        </div>
+        <label>Brand (optional) <input name="brand" maxlength="40"></label>
+      </div>
+      <div class="rd-adjust">
+        <label>Filament left on the roll (g) <input name="adjust" type="number" min="0" max="10000"></label>
+        <p class="dlg-hint">Tip: weigh the roll and subtract the empty spool (about 200–250 g for most 1 kg rolls).</p>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn ghost rd-remove" type="button">Remove roll</button>
+        <span class="grow"></span>
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Save</button>
       </div>
     </form>
   </dialog>

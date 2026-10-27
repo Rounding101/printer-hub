@@ -69,6 +69,7 @@ class MockDriver extends PrinterDriver {
         totalLayers: total,
         elapsed: Math.round(s.progress * 54),
         remaining: Math.round((100 - s.progress) * 54),
+        grams: 20, // like the AD5M's own job filament estimate
         thumb: false,
       } : null,
     });

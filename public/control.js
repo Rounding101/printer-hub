@@ -236,27 +236,107 @@ const Control = (() => {
     }
   }
 
+  // Slots come from the printer (Kobra X ACE) or are a single virtual slot for
+  // single-extruder printers. Remaining filament comes from the hub's own roll
+  // tracking, not the printer (whose "100%" is a placeholder).
+  let spools = [];
+
   function renderSlots(state) {
     const box = $('ctl-slots');
     $('ctl-slots-refresh').hidden = !state.slots;
-    if (!state.slots?.length) {
-      box.dataset.sig = '';
-      box.innerHTML = `<p class="dlg-hint">${state.type === 'flashforge' ? 'Single extruder: load filament from the printer’s screen.' : 'No multi-color unit reported.'}</p>`;
-      return;
-    }
-    const sig = JSON.stringify(state.slots);
+    const slots = state.slots?.length
+      ? state.slots
+      : [{ index: 0, color: null, type: '', ready: true, single: true }];
+    const mine = spools.filter((s) => s.printerId === state.id);
+    const sig = JSON.stringify([state.id, slots, mine]);
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
-    box.replaceChildren(...state.slots.map((s) => {
+    box.replaceChildren(...slots.map((s) => {
+      const roll = mine.find((r) => r.slot === s.index);
+      const color = roll?.color || s.color;
       const el = document.createElement('div');
-      el.className = 'spool' + (s.ready ? '' : ' empty');
-      el.innerHTML = `<div class="spool-reel"><span class="spool-color"></span></div><span class="spool-type"></span><span class="spool-meta"></span>`;
-      el.querySelector('.spool-color').style.background = `rgb(${s.color.join(',')})`;
-      el.querySelector('.spool-type').textContent = s.ready ? (s.type || 'Unknown') : 'Empty';
-      el.querySelector('.spool-meta').textContent = `Slot ${s.index + 1}${s.ready && s.percent != null ? ` · ${s.percent}%` : ''}`;
-      el.title = `Slot ${s.index + 1}: ${s.ready ? s.type : 'not loaded'}`;
+      el.className = 'spool' + (s.ready ? '' : ' empty') + (roll && roll.percent != null && roll.percent < 15 ? ' low' : '');
+      el.innerHTML = `<div class="spool-reel"><span class="spool-color"></span></div>
+        <span class="spool-type"></span><span class="spool-meta"></span>
+        <div class="spool-bar" hidden><div></div></div><span class="spool-left"></span>
+        <div class="spool-actions"></div>`;
+      if (color) el.querySelector('.spool-color').style.background = `rgb(${color.join(',')})`;
+      el.querySelector('.spool-type').textContent = !s.ready ? 'Empty' : (roll?.material || s.type || (s.single ? 'Spool' : 'Unknown'));
+      el.querySelector('.spool-meta').textContent = s.single ? (roll?.brand || 'Single extruder') : `Slot ${s.index + 1}${roll?.brand ? ` · ${roll.brand}` : ''}`;
+      if (roll) {
+        const bar = el.querySelector('.spool-bar');
+        bar.hidden = false;
+        bar.firstElementChild.style.width = `${Math.max(0, Math.min(100, roll.percent ?? 0))}%`;
+        el.querySelector('.spool-left').textContent = `${roll.remainingGrams} g left · ${roll.percent}%`;
+        el.title = `${roll.remainingGrams} g of ${roll.capacityGrams} g left (estimated from ${Math.round(roll.usedGrams)} g printed since ${new Date(roll.baseAt).toLocaleDateString()})`;
+      } else {
+        el.querySelector('.spool-left').textContent = s.ready ? 'Roll not set' : '';
+      }
+      const actions = el.querySelector('.spool-actions');
+      if (s.ready) {
+        const nb = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'New roll' });
+        nb.onclick = () => openRoll('new', state, s, roll);
+        actions.append(nb);
+        if (roll) {
+          const ab = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small ghost', textContent: 'Adjust' });
+          ab.onclick = () => openRoll('adjust', state, s, roll);
+          actions.append(ab);
+        }
+      }
       return el;
     }));
+  }
+
+  const hex = (c) => '#' + (c || [204, 204, 204]).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+  function openRoll(mode, state, slot, roll) {
+    const dlg = $('roll-dlg');
+    const f = dlg.querySelector('form');
+    const where = slot.single ? state.name : `${state.name}, slot ${slot.index + 1}`;
+    dlg.querySelector('.rd-title').textContent = mode === 'new' ? 'New roll' : 'Adjust roll';
+    dlg.querySelector('.rd-hint').textContent = mode === 'new'
+      ? `Loaded into ${where}. Filament used by prints on this slot is subtracted from here on.`
+      : `${where}: estimated ${roll.remainingGrams} g left of ${roll.capacityGrams} g.`;
+    dlg.querySelector('.rd-new').hidden = mode !== 'new';
+    dlg.querySelector('.rd-adjust').hidden = mode !== 'adjust';
+    dlg.querySelector('.rd-remove').hidden = mode !== 'adjust';
+    f.reset();
+    if (mode === 'new') {
+      f.capacity.value = String(roll?.capacityGrams && [1000, 750, 500, 250, 2000, 3000].includes(roll.capacityGrams) ? roll.capacityGrams : 1000);
+      f.material.value = slot.type || roll?.material || '';
+      f.color.value = hex(slot.color || roll?.color);
+      f.brand.value = roll?.brand || '';
+    } else {
+      f.adjust.value = roll.remainingGrams;
+    }
+    dlg.querySelector('.rd-remove').onclick = async () => {
+      if (!confirm(`Stop tracking the roll in ${where}?`)) return;
+      try { await api(`/api/spools/${enc(roll.id)}`, { method: 'DELETE' }); dlg.close(); } catch (err) { toast(err.message, true); }
+    };
+    dlg.onclose = async () => {
+      if (dlg.returnValue !== 'save') return;
+      try {
+        if (mode === 'new') {
+          await api('/api/spools', { body: {
+            printerId: state.id, slot: slot.index, capacityGrams: Number(f.capacity.value),
+            remainingGrams: f.remaining.value === '' ? undefined : Number(f.remaining.value),
+            material: f.material.value.trim() || null, color: rgb(f.color.value), brand: f.brand.value.trim() || null,
+          } });
+          toast(`New roll set for ${where}`);
+        } else {
+          await api(`/api/spools/${enc(roll.id)}`, { method: 'PATCH', body: { remainingGrams: Number(f.adjust.value) } });
+          toast(`Roll set to ${f.adjust.value} g`);
+        }
+      } catch (err) { toast(err.message, true); }
+    };
+    dlg.returnValue = '';
+    dlg.showModal();
+  }
+
+  function setSpools(list) {
+    spools = list;
+    if (view.state && !root.hidden) renderSlots(view.state);
   }
 
   // ---- Wiring -------------------------------------------------------------------
@@ -329,6 +409,7 @@ const Control = (() => {
   return {
     open,
     close,
+    setSpools,
     onState: (state) => { if (state.id === printerId && !root.hidden) render(state); },
     get printerId() { return printerId; },
   };

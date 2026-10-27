@@ -30,7 +30,7 @@ RUN curl -fsSL -o /tmp/orca.AppImage "$ORCA_URL" \
     && test -d /opt/orca/resources/profiles
 
 # Install whatever shared libraries the binary still can't find, looked up by
-# file name with apt-file, until none are missing (fails the build otherwise).
+# file name with apt-file. Best effort; the self-test below is the real check.
 COPY install-missing-libs.sh /tmp/
 RUN sh /tmp/install-missing-libs.sh /opt/orca && rm /tmp/install-missing-libs.sh
 

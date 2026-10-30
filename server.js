@@ -9,6 +9,7 @@ const { JobLog } = require('./lib/jobs');
 const { Library } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
 const { SpoolStore } = require('./lib/spools');
+const { AuthStore, allowed } = require('./lib/auth');
 
 const DRIVERS = { flashforge: FlashForgeDriver, anycubic: AnycubicDriver, mock: MockDriver };
 
@@ -45,15 +46,20 @@ const dataDir = process.env.DATA_DIR || config.dataDir
 const jobs = new JobLog(dataDir);
 const library = new Library(dataDir);
 const spools = new SpoolStore(dataDir, jobs);
+const auth = new AuthStore(dataDir);
 
 // ---- Live updates (Server-Sent Events) ---------------------------------------
 
-const clients = new Set();
+const clients = new Map(); // response -> session id
 const snapshot = () => [...printers.values()].map((p) => p.state);
 const broadcast = (event, data) => {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of clients) res.write(msg);
+  for (const res of clients.keys()) res.write(msg);
 };
+// Signing out (or being removed) ends that session's live stream right away.
+auth.on('revoked', (ids) => {
+  for (const [res, sid] of clients) if (ids.includes(sid)) { res.end(); clients.delete(res); }
+});
 
 for (const driver of printers.values()) {
   driver.on('update', (state) => {
@@ -202,9 +208,91 @@ async function sliceModel(item, printer, body) {
 
 // ---- HTTP helpers ------------------------------------------------------------
 
-function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'same-origin',
+  'X-Frame-Options': 'DENY',
+};
+
+function json(res, status, body, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...SECURITY_HEADERS, ...headers });
   res.end(JSON.stringify(body));
+}
+
+// ---- Sign-in -------------------------------------------------------------------
+
+const COOKIE = 'hub_session';
+const cookies = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((c) => {
+  const i = c.indexOf('=');
+  return i < 0 ? [c.trim(), ''] : [c.slice(0, i).trim(), decodeURIComponent(c.slice(i + 1).trim())];
+}));
+// Behind an HTTPS reverse proxy the cookie gets the Secure flag.
+const isHttps = (req) => req.socket.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+function sessionCookie(req, token, maxAge) {
+  const attrs = [`${COOKIE}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
+  if (maxAge != null) attrs.push(`Max-Age=${maxAge}`);
+  if (isHttps(req)) attrs.push('Secure');
+  return attrs.join('; ');
+}
+const clearCookie = (req) => sessionCookie(req, '', 0);
+const clientIp = (req) => (config.trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '';
+
+// Changes must come from the hub's own pages: browsers send Origin on
+// cross-site POSTs, so a page elsewhere can't drive the printers with your cookie.
+function sameOrigin(req) {
+  const src = req.headers.origin || req.headers.referer;
+  if (!src) return true; // non-browser clients (curl, scripts)
+  try { return new URL(src).host === req.headers.host; } catch { return false; }
+}
+
+// /api/auth/* and /api/users/*. Returns true when it handled the request.
+async function authRoutes(req, res, url, parts, ctx) {
+  const ip = clientIp(req);
+  if (url.pathname === '/api/auth/me' && req.method === 'GET') {
+    return json(res, 200, { user: ctx?.user || null, setup: auth.needsSetup() }), true;
+  }
+  if (url.pathname === '/api/auth/setup' && req.method === 'POST') {
+    const body = await readBody(req);
+    const user = await auth.setup(body, ip);
+    console.log(`First admin "${user.username}" created from ${ip}`);
+    const { token, maxAge } = auth.createSession(auth.getUser(user.id), { remember: true, ip, userAgent: req.headers['user-agent'] });
+    return json(res, 200, { user }, { 'Set-Cookie': sessionCookie(req, token, maxAge) }), true;
+  }
+  if (url.pathname === '/api/auth/login' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const { token, maxAge, session } = await auth.login(body, { ip, userAgent: req.headers['user-agent'] });
+      return json(res, 200, { user: auth.publicUser(auth.getUser(session.userId)) }, { 'Set-Cookie': sessionCookie(req, token, maxAge) }), true;
+    } catch (err) {
+      console.warn(`Failed sign-in for "${String(body.username || '').slice(0, 40)}" from ${ip}`);
+      return json(res, err.status || 400, { error: err.message }), true;
+    }
+  }
+  if (parts[1] !== 'auth' && parts[1] !== 'users') return false;
+  if (!ctx) return json(res, 401, { error: 'Sign in required' }), true;
+
+  if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+    auth.logout(ctx);
+    return json(res, 200, { ok: true }, { 'Set-Cookie': clearCookie(req) }), true;
+  }
+  if (url.pathname === '/api/auth/password' && req.method === 'POST') {
+    const body = await readBody(req);
+    await auth.changeOwnPassword(ctx, body.current, body.password);
+    return json(res, 200, { ok: true }), true;
+  }
+  if (parts[1] === 'auth' && parts[2] === 'sessions') {
+    if (req.method === 'GET' && !parts[3]) return json(res, 200, auth.listSessions(ctx.user.id, ctx.sessionId)), true;
+    if (req.method === 'DELETE' && !parts[3]) { auth.revokeOthers(ctx); return json(res, 200, { ok: true }), true; }
+    if (req.method === 'DELETE') { auth.revoke(ctx.user.id, parts[3]); return json(res, 200, { ok: true }), true; }
+  }
+  if (parts[1] === 'users') {
+    if (ctx.user.role !== 'admin') return json(res, 403, { error: 'Only admins can manage users' }), true;
+    if (!parts[2] && req.method === 'GET') return json(res, 200, auth.listUsers()), true;
+    if (!parts[2] && req.method === 'POST') return json(res, 200, await auth.createUser(await readBody(req))), true;
+    if (parts[2] && req.method === 'PATCH') return json(res, 200, await auth.updateUser(parts[2], await readBody(req), ctx)), true;
+    if (parts[2] && req.method === 'DELETE') { auth.deleteUser(parts[2], ctx); return json(res, 200, { ok: true }), true; }
+  }
+  return json(res, 404, { error: 'Not found' }), true;
 }
 
 function readBody(req) {
@@ -243,6 +331,9 @@ const STATIC = {
   '/files.js': ['public/files.js', 'text/javascript; charset=utf-8'],
   '/preview.js': ['public/preview.js', 'text/javascript; charset=utf-8'],
   '/control.js': ['public/control.js', 'text/javascript; charset=utf-8'],
+  '/account.js': ['public/account.js', 'text/javascript; charset=utf-8'],
+  '/login': ['public/login.html', 'text/html; charset=utf-8'],
+  '/login.js': ['public/login.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
   '/vendor/mpegts.js': ['node_modules/mpegts.js/dist/mpegts.js', 'text/javascript; charset=utf-8'],
 };
@@ -295,12 +386,24 @@ const server = http.createServer(async (req, res) => {
     const [file, type] = STATIC[url.pathname];
     return fs.readFile(path.join(__dirname, file), (err, buf) => {
       if (err) return json(res, 404, { error: 'Not found' });
-      res.writeHead(200, { 'Content-Type': type });
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache', ...SECURITY_HEADERS });
       res.end(buf);
     });
   }
 
   if (parts[0] !== 'api') return json(res, 404, { error: 'Not found' });
+  if (url.pathname === '/api/health') return json(res, 200, { ok: true });
+
+  // Everything else under /api needs a signed-in user with a role that allows it.
+  const ctx = auth.resolve(cookies(req)[COOKIE]);
+  if (!['GET', 'HEAD'].includes(req.method) && !sameOrigin(req)) return json(res, 403, { error: 'Cross-site request refused' });
+  try {
+    if (await authRoutes(req, res, url, parts, ctx)) return;
+  } catch (err) {
+    return json(res, err.status || 400, { error: err.message });
+  }
+  if (!ctx) return json(res, 401, { error: 'Sign in required' }, { 'Set-Cookie': clearCookie(req) });
+  if (!allowed(ctx.user.role, req.method, url.pathname)) return json(res, 403, { error: `Your account (${ctx.user.role}) can only watch, not change things` });
 
   if (url.pathname === '/api/printers' && req.method === 'GET') return json(res, 200, snapshot());
 
@@ -310,7 +413,7 @@ const server = http.createServer(async (req, res) => {
     res.write(`event: jobs\ndata: ${JSON.stringify(jobs.list())}\n\n`);
     res.write(`event: library\ndata: ${JSON.stringify(libraryView())}\n\n`);
     res.write(`event: spools\ndata: ${JSON.stringify(spools.list())}\n\n`);
-    clients.add(res);
+    clients.set(res, ctx.sessionId);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => { clients.delete(res); clearInterval(ping); });
     return;
@@ -450,8 +553,28 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
+// HUB_RESET_PASSWORD=<username> sets a new random password for that user at
+// startup and prints it to the log (for a forgotten admin password). Remove the
+// variable again afterwards.
+async function resetFromEnv() {
+  const name = process.env.HUB_RESET_PASSWORD;
+  if (!name) return;
+  const user = auth.users.find((u) => u.username === name.trim().toLowerCase());
+  if (!user) return console.warn(`HUB_RESET_PASSWORD: no user "${name}"`);
+  const pw = require('node:crypto').randomBytes(9).toString('base64url');
+  await auth.updateUser(user.id, { password: pw });
+  console.log(`
+*** Password for "${user.username}" reset to: ${pw}
+*** Sign in, change it under Account, and remove HUB_RESET_PASSWORD.
+`);
+}
+
+server.listen(port, async () => {
   console.log(`Printer Hub running at http://localhost:${port}`);
+  await resetFromEnv().catch((err) => console.error('Password reset failed:', err.message));
+  if (auth.needsSetup()) console.log(`
+*** First run: open the hub and create the admin account with setup code ${auth.issueSetupCode()}
+`);
   for (const p of printers.values()) {
     console.log(`  - ${p.state.name} (${p.cfg.type}${p.cfg.host ? ' @ ' + p.cfg.host : ''})`);
     p.start();

@@ -18,9 +18,11 @@
       <a href="#library" data-view="library">Library</a>
       <a href="#jobs" data-view="jobs">Job log</a>
       <a href="#totals" data-view="totals">Totals</a>
+      <a href="#users" data-view="users" id="nav-users" hidden>Users</a>
     </nav>
     <p id="summary" class="summary">Connecting…</p>
     <span id="conn" class="conn" title="Live connection to server"></span>
+    <a href="#account" class="me" id="me" title="Your account"><span class="me-name"></span><span class="me-role"></span></a>
   </header>
 
   <main id="grid" class="grid view" data-view="printers" aria-live="polite"></main>
@@ -349,6 +351,81 @@
     </form>
   </dialog>
 
+  <section class="view page narrow" data-view="account" hidden>
+    <h2 class="page-h">Account</h2>
+    <section class="panel">
+      <div class="panel-head"><h3>Signed in as</h3></div>
+      <p class="acct-who"><strong id="acct-name"></strong> <span class="pill" id="acct-role"></span></p>
+      <p class="dlg-hint" id="acct-role-hint"></p>
+      <button class="btn" type="button" id="acct-logout">Sign out</button>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h3>Change password</h3></div>
+      <form class="form" id="pw-form">
+        <label>Current password <input name="current" type="password" autocomplete="current-password" required></label>
+        <div class="form-row">
+          <label>New password <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Repeat new password <input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
+        </div>
+        <p class="dlg-hint">At least 8 characters. Your other devices are signed out.</p>
+        <p class="err" role="alert" hidden></p>
+        <div><button class="btn primary" type="submit">Change password</button></div>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h3>Signed-in devices</h3>
+        <button class="btn small ghost" type="button" id="sess-others">Sign out other devices</button>
+      </div>
+      <div class="table-wrap flat">
+        <table class="table">
+          <thead><tr><th>Device</th><th>Address</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+          <tbody id="sess-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section class="view page narrow" data-view="users" hidden>
+    <h2 class="page-h">Users</h2>
+    <section class="panel">
+      <div class="panel-head"><h3>Add a user</h3></div>
+      <form class="form" id="user-form">
+        <div class="form-row three">
+          <label>Username <input name="username" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
+          <label>Password <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Role
+            <select name="role">
+              <option value="operator">Operator</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+        </div>
+        <p class="dlg-hint"><strong>Admin</strong>: everything, including users. <strong>Operator</strong>: print, control printers, manage files, rolls and the job log. <strong>Viewer</strong>: watch status, cameras and logs only.</p>
+        <p class="err" role="alert" hidden></p>
+        <div><button class="btn primary" type="submit">Add user</button></div>
+      </form>
+    </section>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>User</th><th>Role</th><th>Created</th><th>Last sign-in</th><th></th></tr></thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog id="reset-dlg">
+    <form method="dialog" class="dlg form">
+      <h3>Set a new password</h3>
+      <p class="dlg-hint reset-hint"></p>
+      <label>New password <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Set password</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="roll-dlg">
     <form method="dialog" class="dlg form">
       <h3 class="rd-title">New roll</h3>
@@ -406,6 +483,7 @@
   <script src="/jobs.js"></script>
   <script src="/files.js"></script>
   <script src="/control.js"></script>
+  <script src="/account.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

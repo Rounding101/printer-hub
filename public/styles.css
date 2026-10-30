@@ -378,6 +378,41 @@ input[type="color"] { padding: 2px; height: 36px; width: 100%; cursor: pointer; 
   .ctl-bottom { grid-template-columns: 1fr 1fr; }
   .ctl-filament { grid-column: 1 / -1; }
 }
+/* ---- Sign-in, account and users ---- */
+.me {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+  color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.me:hover, .me[aria-current="page"] { color: var(--text); background: var(--surface-2); }
+.me::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); flex: none; }
+.me-role:not(:empty) { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 99px; background: var(--surface-2); }
+.page.narrow { max-width: 860px; width: 100%; box-sizing: border-box; }
+.page-h { margin: 0; font-size: 20px; font-weight: 650; }
+.panel .form { margin-top: 12px; }
+.panel > .btn { margin-top: 4px; }
+.acct-who { margin: 12px 0 4px; display: flex; align-items: center; gap: 8px; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.table-wrap.flat { border: 0; border-radius: 0; margin-top: 8px; }
+.pill.tag { margin-left: 8px; font-size: 11px; background: var(--surface-2); color: var(--muted); }
+
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
+.auth-card {
+  width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 28px; box-shadow: var(--shadow); box-sizing: border-box;
+}
+.auth-card .brand { margin-bottom: 20px; }
+.auth-card h1 { font-size: 18px; margin: 0; }
+.auth-card h2 { font-size: 16px; margin: 0; }
+.auth-card .btn { justify-content: center; padding-top: 9px; padding-bottom: 9px; }
+
+/* Viewers can watch but not change anything (the server enforces this too). */
+[data-role="viewer"] .card .actions .btn:not(.act-controls),
+[data-role="viewer"] :is(.ctl-files .seg, #ctl-drop, #ctl-progress, #ctl-actions, .ctl-motion, #ctl-presets, #ctl-slots-refresh),
+[data-role="viewer"] :is(.ctl-thermal, .ctl-filament) :is(button, input[type="range"]),
+[data-role="viewer"] :is(#lib-drop, #add-past),
+[data-role="viewer"] .row-actions :is(button, select) { display: none !important; }
+[data-role="viewer"] :is(.ctl-thermal, .ctl-filament, #jobs-body) :is(input, select) { pointer-events: none; opacity: 0.7; }
+
 @media (max-width: 820px) {
   .ctl { padding: 16px; }
   .ctl-top, .ctl-bottom { grid-template-columns: 1fr; }
@@ -402,6 +437,8 @@ input[type="color"] { padding: 2px; height: 36px; width: 100%; cursor: pointer; 
   .topbar { flex-wrap: wrap; }
   .tabs { order: 3; width: 100%; margin-left: 0; }
   .tiles { grid-template-columns: repeat(2, 1fr); }
+  .me { margin-left: auto; }
+  .form-row.three { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {

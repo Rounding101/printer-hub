@@ -43,6 +43,37 @@ GitHub repo to redeploy on push.
 The Docker host has to be able to reach both printers' IPs. If they're on
 other VLANs, the host's routing or firewall has to allow it.
 
+## Sign-in and users
+
+The hub controls real printers, so every page and API call needs a signed-in
+user. Only the sign-in page and `/api/health` are open.
+
+- **First run:** the hub prints a one-time **setup code** in its log. In
+  Dockhand, open the printer-hub container's logs and look for
+  `*** First run: ... setup code XXXXX-XXXXX`. Open the hub, enter the code,
+  and create the admin account. After that, the code is gone.
+- **Users** (admins only) adds accounts with one of three roles:
+  - **Admin**: everything, including managing users.
+  - **Operator**: print, control printers, manage files, rolls and the job log.
+  - **Viewer**: watch status, cameras and logs. Every change is refused.
+- **Account** (your name, top right): change your password, see the devices
+  you're signed in on, and sign them out.
+- Sessions last 30 days and renew as you use them. Untick *Keep me signed in*
+  for a session that ends when the browser closes, or after 12 hours.
+- Changing or resetting a password signs that user out everywhere else.
+  Deleting a user ends their sessions and live view at once.
+- Eight wrong passwords lock that username and that address out for 15 minutes.
+- **Forgot the admin password:** set `HUB_RESET_PASSWORD=<username>` in the
+  stack env and redeploy. The log shows a new random password. Sign in, change
+  it, then remove the variable.
+
+Passwords are stored as scrypt hashes and sessions as SHA-256 hashes of their
+tokens, in `data/auth.json`. The session cookie is HttpOnly and SameSite=Lax,
+and changes from other sites are refused (Origin check). If you put the hub
+behind an HTTPS reverse proxy, the cookie gets the Secure flag from
+`X-Forwarded-Proto`. Set `"trustProxy": true` in the config so failed
+sign-ins are counted per real client address.
+
 ## Configure `config.json`
 
 ```json
@@ -216,8 +247,9 @@ are saved in `data/jobs.json`.
 - Drivers live in `drivers/`, one file per printer brand. To add a brand,
   extend `PrinterDriver` in `drivers/base.js`.
 
-API: `GET /api/printers`, `GET /api/printers/:id/files`,
+API (needs a session cookie from `POST /api/auth/login`): `GET /api/printers`, `GET /api/printers/:id/files`,
 `POST /api/printers/:id/{pause|resume|cancel}`,
 `POST /api/printers/:id/light {"on":true}`, `POST /api/printers/:id/print {"file":"x.gcode"}`.
 
-There is no login. Keep the hub on your home network and don't port-forward it.
+Even with sign-in, keep the hub on your home network or behind a VPN. Don't
+port-forward it to the internet.

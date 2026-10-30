@@ -33,6 +33,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) Account.toLogin();
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
@@ -223,7 +224,7 @@ function confirmCancel(card, go) {
 
 function showView() {
   const [view, arg] = (location.hash.slice(1) || 'printers').split('/');
-  const known = ['printers', 'control', 'library', 'jobs', 'totals'].includes(view) ? view : 'printers';
+  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'account', 'users'].includes(view) ? view : 'printers';
   if (known === 'control') {
     // Printers arrive over SSE; open once the card exists.
     const id = decodeURIComponent(arg || '');
@@ -235,10 +236,12 @@ function showView() {
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
   document.querySelectorAll('[data-sub]').forEach((el) => { el.hidden = el.dataset.sub !== known; });
   if (known === 'jobs' || known === 'totals') Jobs.render();
+  if (known === 'account') Account.renderAccount();
+  if (known === 'users') Account.renderUsers();
+  document.getElementById('me').setAttribute('aria-current', known === 'account' ? 'page' : 'false');
 }
 let pendingControl = null;
 window.addEventListener('hashchange', showView);
-showView();
 
 // ---- Live updates ---------------------------------------------------------------
 
@@ -251,7 +254,12 @@ function connect() {
   es.addEventListener('job', (e) => Jobs.upsert(JSON.parse(e.data)));
   es.addEventListener('library', (e) => Files.setLibrary(JSON.parse(e.data)));
   es.addEventListener('spools', (e) => Control.setSpools(JSON.parse(e.data)));
-  es.onerror = () => conn.classList.remove('live'); // EventSource reconnects on its own
+  es.onerror = async () => {
+    conn.classList.remove('live'); // EventSource reconnects on its own...
+    // ...unless the session ended (signed out elsewhere, or the account was removed).
+    if (!(await Account.load())) es.close();
+  };
 }
 
-connect();
+// Signed-in check first; the sign-in page sends the browser back here after.
+Account.load().then((me) => { if (me) { showView(); connect(); } });

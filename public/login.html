@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Printer Hub</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='4' width='24' height='24' rx='5' fill='%23e0883a'/><rect x='10' y='10' width='12' height='4' fill='white'/><rect x='14' y='14' width='4' height='8' fill='white'/></svg>">
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <h1>Printer Hub</h1>
+    </div>
+
+    <form id="login-form" class="form" hidden>
+      <h2>Sign in</h2>
+      <label>Username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <label class="check"><input name="remember" type="checkbox" checked> Keep me signed in for 30 days</label>
+      <p class="err" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Sign in</button>
+    </form>
+
+    <form id="setup-form" class="form" hidden>
+      <h2>Create the admin account</h2>
+      <p class="dlg-hint">First run. The setup code is printed in the hub's log (in Dockhand: the printer-hub container's logs).</p>
+      <label>Setup code <input name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-12345" required></label>
+      <label>Username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="admin" required></label>
+      <label>Password <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Repeat password <input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="err" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Create account and sign in</button>
+    </form>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

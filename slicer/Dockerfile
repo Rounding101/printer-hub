@@ -6,7 +6,9 @@ ARG OCCT_RUNTIME="libocct-data-exchange-7.6t64 libocct-modeling-algorithms-7.6t6
 # installing those properly drags in GL/X11/FreeImage dev packages we don't use.
 # apt fails intermittently on the build host (exit 100), so: IPv4 only, per-file
 # retries, and the whole fetch retried up to 4 times.
-ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev"
+# Ubuntu ships NCollection_AliasedArray.hxx (needed by the mesh headers) in the
+# visualization package, so all six are required.
+ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev libocct-ocaf-dev libocct-visualization-dev"
 RUN printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "60";\n' \
       > /etc/apt/apt.conf.d/80build-retries \
     && for i in 1 2 3 4; do \

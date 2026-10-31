@@ -1,6 +1,6 @@
 {
   "name": "printer-hub",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "released": "2026-10-31",
   "description": "Central dashboard for FlashForge AD5M and Anycubic Kobra X printers",
   "main": "server.js",

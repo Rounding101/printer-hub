@@ -27,7 +27,7 @@ COPY step2stl.cpp /src/
 # Linked by soname (the unversioned .so links come with the -dev packages),
 # against every OpenCASCADE library; --as-needed drops the unused ones.
 RUN g++ -O2 -o /out/step2stl /src/step2stl.cpp -I/occt/usr/include/opencascade -Wl,--as-needed \
-      $(for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7.6; do printf ' -l:%s' "${f##*/}"; done)
+      $(for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7; do printf ' -l:%s' "${f##*/}"; done)
 RUN /out/step2stl --make-test /out/test.step
 RUN /out/step2stl /out/test.step /tmp/test.stl && test -s /tmp/test.stl
 

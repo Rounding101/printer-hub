@@ -1,8 +1,10 @@
-# Builds the slicer image (converter stage first, for a quick, readable log).
+# Builds the slicer image, runs its self-test, and slices a real STEP file
+# through its API. Runs when slicer files change on main.
 name: slicer-build
 on:
   push:
-    branches: [ci/slicer-build]
+    branches: [main, ci/slicer-build]
+    paths: ["slicer/**", ".github/workflows/slicer-build.yml"]
   workflow_dispatch:
 jobs:
   build:

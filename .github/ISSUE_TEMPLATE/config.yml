@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/Shawman511/printer-hub/blob/main/docs/troubleshooting.md
+    about: Printer won't connect, no camera, setup code, slicing or Docker problems. Most answers are here.
+  - name: Security problem
+    url: https://github.com/Shawman511/printer-hub/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.

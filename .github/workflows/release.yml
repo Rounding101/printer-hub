@@ -61,3 +61,48 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # The one-line install, end to end, on a clean machine with the images just published.
+  installer:
+    needs: images
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3 # needed while the packages are private
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install with install.sh
+        run: |
+          # Serve this checkout as the "raw" files (the repo may still be private).
+          python3 -m http.server 8765 >/dev/null 2>&1 &
+          sleep 1
+          version=${GITHUB_REF_NAME#v}
+          [ "$version" = "$GITHUB_REF_NAME" ] && version=latest   # manual runs
+          export HUB_VERSION=$version PRINTER_HUB_RAW=http://127.0.0.1:8765 PRINTER_HUB_DIR=$RUNNER_TEMP/hub
+          sh ./install.sh | tee install.log
+          grep -Eq 'Setup code:  [0-9A-Z]{5}-[0-9A-Z]{5}' install.log
+          docker inspect --format '{{.Config.Image}}' printer-hub printer-hub-slicer
+      - name: First run, add a printer, slicer reachable
+        run: |
+          base=http://127.0.0.1:3000
+          code=$(sed -n 's/.*Setup code:  \([0-9A-Z-]*\).*/\1/p' install.log)
+          curl -sf $base/api/auth/me | jq -e '.setup == true'
+          curl -sf -c jar -H "Origin: $base" -H 'Content-Type: application/json' \
+            -d "{\"code\":\"$code\",\"username\":\"admin\",\"password\":\"ci-$(openssl rand -hex 8)\"}" $base/api/auth/setup | jq -e '.user.role == "admin"'
+          curl -sf -b jar -H "Origin: $base" -H 'Content-Type: application/json' \
+            -d '{"type":"mock","name":"Test printer"}' $base/api/printer-setup | jq -e '.id == "test-printer"'
+          for i in $(seq 1 20); do curl -sf -b jar $base/api/printers | jq -e '.[0].online == true' && break; sleep 1; done
+          curl -sf -b jar $base/api/printers | jq -e '.[0].online == true'
+          curl -sf -b jar $base/api/slicer | jq -e '.available == true and .step == true'
+          curl -sf -b jar $base/api/auth/me | jq -r '.hub.version'
+      - name: Re-running the installer updates and keeps the data
+        run: |
+          export HUB_VERSION=${GITHUB_REF_NAME#v} PRINTER_HUB_RAW=http://127.0.0.1:8765 PRINTER_HUB_DIR=$RUNNER_TEMP/hub
+          [ "$HUB_VERSION" = "$GITHUB_REF_NAME" ] && export HUB_VERSION=latest
+          (python3 -m http.server 8765 >/dev/null 2>&1 &) ; sleep 1
+          sh ./install.sh | tee again.log
+          grep -q 'Sign in with your existing account' again.log
+          if grep -q 'Setup code:' again.log; then echo 'printed a stale setup code'; exit 1; fi
+          curl -sf http://127.0.0.1:3000/api/auth/me | jq -e '.setup == false'

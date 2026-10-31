@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in Printer Hub doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Printer type
+      options:
+        - Not printer-specific
+        - Klipper (Moonraker)
+        - OctoPrint
+        - Prusa (PrusaLink)
+        - FlashForge Adventurer 5M / 5M Pro
+        - Anycubic Kobra X / Kobra 3 / S1
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Printer model and firmware
+      placeholder: e.g. Voron 2.4 with Klipper v0.12, Mainsail
+  - type: input
+    id: version
+    attributes:
+      label: Printer Hub version
+      description: Shown under the name in the app's top bar.
+      placeholder: v0.11 · Oct 31, 2026
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it installed?
+      options:
+        - Installer (install.sh)
+        - Docker Compose (published images)
+        - Docker Compose (built from source)
+        - docker run
+        - Node.js without Docker
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: "From `docker logs --tail 100 printer-hub` (and `printer-hub-slicer` for slicing problems). Remove anything private, like passwords or API keys."
+      render: text

@@ -1,0 +1,131 @@
+# Using Printer Hub
+
+[← Back to the README](../README.md)
+
+A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing) and the [job log](#job-log-and-totals).
+
+## Control panel
+
+**Controls** on a printer card opens `#control/<printer>`, a full-page view of
+that printer:
+
+- **Files:** upload only, or upload & print (models go to the slicer).
+  Browse printer files.
+- **Camera** at full size.
+- **Status:** progress, layer, time remaining, and the clock time it will
+  finish. Pause, resume, cancel, light, and motors off.
+- **Move:** XY jog pad, Z up/down, step size 0.1 / 1 / 10 / 50 mm, and home XY,
+  Z or all.
+- **Temperatures:** nozzle and bed targets (slider or number), plus PLA, PETG
+  and ABS preheat presets and Cool down. Max 280/110 °C on the AD5M and
+  300/120 °C on the Kobra X.
+- **Fans & speed:** part fan %. During a print: AD5M speed 50–150%, or the
+  Kobra X's Silent / Standard / Sport modes.
+- **Filament:** each Kobra X ACE slot, or the AD5M's single spool, shows a
+  hub-tracked roll. See below.
+
+### Filament rolls
+
+The printers don't really measure what's left (the Kobra X reports 100% for
+every slot), so the hub tracks rolls itself:
+
+- **New roll** on a slot records a roll's size (1 kg by default), material and
+  color. For a part-used roll, enter how many grams are left.
+- Each print's filament is charged to the slot(s) it used:
+  - Kobra X prints started from the hub: the file's per-color grams and the
+    slot mapping you chose.
+  - Kobra X prints started elsewhere: the file's per-color grams, with the
+    slots guessed the same way the print dialog suggests them.
+  - AD5M: the file's weight from the library, or the printer's own estimate.
+
+  Cancelled or failed prints are charged by how far they got.
+- Remaining = the roll's starting weight minus the filament charged since. It's
+  recalculated from the job log, so fixing a job's outcome corrects the roll.
+- **Adjust** sets the remaining grams after weighing a roll (subtract the empty
+  spool, usually 200–250 g). Rolls are stored in `data/spools.json`.
+- The job log and Totals gain a Filament column, and the CSV gets `filament_g`.
+
+Safety: jog, home and motors off are refused while a print is running. The
+server enforces every limit, not just the UI.
+
+Protocols: the AD5M takes G-code over its TCP API (`G91`/`G1` jog, `G28`,
+`M104`/`M140`, `M106`, `M18`) and `printerCtl_cmd` for speed. The Kobra X takes
+MQTT `axis/move`, `axis/turnOff`, `tempature/set`, `fan/setSpeed` and
+`print/update`.
+
+## Files: library, uploads and starting prints
+
+- **Library tab:** drop `.gcode`, `.gx`, `.3mf` or `.bgcode` files (up to 512 MB)
+  to store them on the hub, in `data/library/` (the `printer-hub-data` volume in
+  Docker). The hub reads the slicer header to show which printer and material
+  each file was sliced for, and suggests a matching printer. **Send** copies the
+  file to a printer. **Print…** sends it if needed, then opens the print dialog.
+- **Start print… → Upload from computer:** uploads straight to that printer
+  and keeps a copy in the library. With **Print after upload** on, the print
+  dialog opens right after.
+- **Print dialog:** on the Kobra X, each color in the file is mapped to an ACE
+  slot. The default is the loaded slot with the same material and the closest
+  color, and you can change it. Both printers have an auto-level option.
+- **Reprint** in the job log opens the same dialog. If the file is gone from
+  the printer but still in the library, it offers to send it again.
+
+Kobra X uploads and starts follow the format validated on firmware 2.0.2.2
+by [kobra-lan-cli](https://github.com/eduardobittencourt/kobra-lan-cli). The
+printer must be idle to receive files.
+
+## Models and slicing
+
+- **Library → Models:** drop `.stl`, `.obj`, `.step`/`.stp`, `.amf` or a
+  `.3mf` project. A `.3mf` that already contains sliced plates goes to Print
+  files instead. STL, OBJ and 3MF models get a 3D **Preview** with dimensions.
+- **Slice…** runs [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)
+  (2.4.2 by default) in the `slicer` container, with the printer's profile from
+  Settings (FlashForge and Anycubic printers have one preset):
+  - Quality and filament lists are Orca's presets for that printer. Brands
+    without their own filaments (Voron, Custom, …) get Orca's generic filament
+    library.
+  - The build plate defaults to the printer's own, or else the plate the
+    filament has temperatures for (e.g. smooth PEI on Prusa), so beds heat
+    properly.
+  - STEP files are meshed to STL first with OpenCASCADE (`slicer/step2stl.cpp`,
+    same tolerances as Orca's desktop app), since Orca's CLI can't read STEP.
+
+  You can set copies on the plate (they're auto-arranged), infill, supports
+  (off, normal or tree), walls, brim and auto-orient. The dialog remembers your
+  last choices for each printer.
+- The result lands in Print files, linked to its model. The copy count becomes
+  the job's **items per plate**, so 4 copies counts as 4 items in Totals.
+  **Send & print…** goes straight to the print dialog.
+- Kobra X slices get a `; paint_info` header line (Anycubic Slicer Next writes
+  one; Orca doesn't), so the printer can report the file's color for slot mapping.
+- The slicer flattens Orca's `inherits` chains into standalone presets and fixes
+  one Kobra X profile value the command-line tool rejects (cut retraction 0,
+  while that feature is off). When building from source, set a different Orca
+  version with the `ORCA_VERSION` build argument.
+- Multi-color painting and placing parts by hand still need a desktop slicer.
+
+## Job log and totals
+
+While the hub is running, it logs every print by itself: start, finish and
+outcome (completed, cancelled or failed), the file name, and print time. Jobs
+are saved in `data/jobs.json`.
+
+- **Items per plate:** type how many items a plate makes into any of its jobs
+  (e.g. `4`). That number becomes the default for the model, so every
+  later reprint counts 4. Earlier jobs of that model that never got a
+  count are filled in too.
+- **Grouping:** re-slices of the same model count together. The slicer's date
+  prefix, filament, layer height and time suffix are stripped, so
+  `1024-1448-Bracket_plate(01)_PLA_0.2_11h0m.gcode` and
+  `1021-0900-Bracket_plate(01)_PLA_0.2_11h2m.gcode` both count as **Bracket**.
+- **Totals** shows items, plates, print hours and failures per model, with
+  filters for period (today, 7 days, 30 days, month, year), printer, and a search box.
+- **Reprint** starts the same file on the same printer. The button is
+  enabled when that printer is idle.
+- **Add past prints…** back-fills prints made before the hub was logging
+  (plates × items per plate, hours per plate, date).
+- **Export CSV** downloads the whole log.
+- Prints made while the hub isn't running aren't seen. If the hub restarts
+  mid-print, the job is still logged when the print finishes; if the print
+  ended while the hub was down, the job shows as **Unknown** and you can set
+  its outcome by hand.

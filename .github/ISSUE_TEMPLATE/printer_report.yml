@@ -1,0 +1,42 @@
+name: Printer report
+description: Tell us how Printer Hub works with your printer, good or bad.
+labels: [printer report]
+body:
+  - type: markdown
+    attributes:
+      value: The Klipper, OctoPrint and PrusaLink drivers are tested against simulated printers. Reports from real ones help a lot, including "it all just works".
+  - type: dropdown
+    id: type
+    attributes:
+      label: Printer type in Settings
+      options:
+        - Klipper (Moonraker)
+        - OctoPrint
+        - Prusa (PrusaLink)
+        - FlashForge Adventurer 5M / 5M Pro
+        - Anycubic Kobra X / Kobra 3 / S1
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Printer model and firmware
+      placeholder: e.g. Creality K1 Max, rooted, Klipper + Fluidd
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works?
+      options:
+        - label: Connection test and live status
+        - label: Pause / resume / cancel
+        - label: Temperatures, moving, fans
+        - label: Camera
+        - label: Uploading and starting prints
+        - label: Slicing with the printer's profile
+  - type: textarea
+    id: notes
+    attributes:
+      label: What didn't work, or anything else
+      description: Error messages and log lines (`docker logs --tail 100 printer-hub`) help. Remove passwords and API keys.

@@ -25,7 +25,8 @@
 
     <form id="setup-form" class="form" hidden>
       <h2>Create the admin account</h2>
-      <p class="dlg-hint">First run. The setup code is printed in the hub's log (in Dockhand: the printer-hub container's logs).</p>
+      <p class="dlg-hint">Welcome! Enter the one-time setup code to create your admin account. The installer showed it; otherwise it's in the hub's log:</p>
+      <code class="setup-cmd">docker logs printer-hub 2&gt;&amp;1 | grep "setup code"</code>
       <label>Setup code <input name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-12345" required></label>
       <label>Username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="admin" required></label>
       <label>Password <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>

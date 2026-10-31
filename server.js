@@ -302,7 +302,9 @@ function sessionCookie(req, token, maxAge) {
   return attrs.join('; ');
 }
 const clearCookie = (req) => sessionCookie(req, '', 0);
-const clientIp = (req) => (config.trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '';
+// Behind a reverse proxy, count failed sign-ins per real client (X-Forwarded-For).
+const TRUST_PROXY = process.env.TRUST_PROXY ? process.env.TRUST_PROXY === 'true' : !!config.trustProxy;
+const clientIp = (req) => (TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '';
 
 // Changes must come from the hub's own pages: browsers send Origin on
 // cross-site POSTs, so a page elsewhere can't drive the printers with your cookie.

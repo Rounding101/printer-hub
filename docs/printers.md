@@ -1,0 +1,92 @@
+# Printers
+
+[← Back to the README](../README.md)
+
+## What's supported
+
+| Type in Settings | Printers | Status | Control | Start prints | Camera |
+| --- | --- | --- | --- | --- | --- |
+| **Klipper (Moonraker)** | Voron, Creality K1 / Sonic Pad, Elegoo Neptune 4, Sovol, Qidi, RatRig and other Klipper printers with Mainsail or Fluidd | ✓ | ✓ | ✓ | ✓ (Moonraker webcams) |
+| **OctoPrint** | Any printer connected to OctoPrint / OctoPi (Creality Ender, Prusa MK3, most Marlin printers) | ✓ | ✓ | ✓ | ✓ (OctoPrint webcam) |
+| **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ | pause / resume / cancel | ✓ | stream URL only |
+| **FlashForge Adventurer 5M / 5M Pro** | Stock firmware, LAN-only mode | ✓ | ✓ | ✓ | ✓ |
+| **Anycubic Kobra X / Kobra 3 / S1** | Stock firmware, LAN Mode (incl. ACE multi-color) | ✓ | ✓ | ✓ | ✓ |
+| **Simulator** | A pretend printer for trying the hub | ✓ | ✓ | ✓ | ✓ |
+
+The FlashForge and Anycubic drivers are used daily on real printers. The
+Klipper, OctoPrint and PrusaLink drivers follow those projects' documented
+APIs and are tested against simulated servers in [`test/`](../test/), but haven't
+been run against every model. If something doesn't work with yours, please
+[open an issue](https://github.com/Shawman511/printer-hub/issues).
+
+Not supported yet: Bambu Lab, Elegoo Centauri (SDCP) and Creality printers on
+stock (non-Klipper) firmware. Adding a printer type is one file in
+[`drivers/`](../drivers/); see [Development](development.md#how-it-works).
+
+## Adding a printer
+
+Admins add printers under **Settings → Printers → Add printer**:
+
+1. **Type:** pick how the printer is reached (see [What's supported](#whats-supported)).
+2. **Name** and **Address:** the printer's IP address or host name. Give it a
+   DHCP reservation in your router so the address doesn't change.
+3. The type's own settings (below).
+4. **Slice with:** the OrcaSlicer profile used when you slice models for this
+   printer: its brand, then the model and nozzle. For a printer that isn't
+   listed, **Custom** has generic Klipper and Marlin profiles.
+5. **Test connection**, then **Save**. The printer shows up on the dashboard
+   right away.
+
+Passwords and keys are stored on the server (`data/printers.json` in the data
+volume) and never sent back to the browser. Removing a printer keeps its job
+history.
+
+## Settings for each type
+
+### Klipper (Moonraker)
+
+Use Moonraker's address; port 7125 is assumed unless
+you give one (e.g. `voron.local` or `192.168.1.60:7125`). An API key is only
+needed if Moonraker doesn't trust your hub's network (`[authorization]`
+`trusted_clients`). The camera comes from Moonraker's webcam settings. For a
+light switch, enter the name of the `[output_pin]` that drives your light.
+
+### OctoPrint
+
+Use OctoPrint's address (e.g. `octopi.local`, or a full URL such
+as `http://192.168.1.70:5000`), and an API key from OctoPrint's
+*Settings → Application Keys*. The camera comes from OctoPrint's webcam
+settings. OctoPrint must be connected to the printer.
+
+### Prusa (PrusaLink)
+
+Turn on PrusaLink on the printer. The address and
+password are on its screen under *Settings → Network*; the username is `maker`.
+Older firmware shows an API key instead of a password. Prusa printers have no
+local camera stream, but you can enter one (e.g. a webcam on a Pi).
+
+### FlashForge Adventurer 5M / 5M Pro
+
+On the printer's screen, turn on
+**LAN-only mode** in the network settings; it then shows a **check code**. The
+serial number is under About / device info. With both you get everything
+(status, light, files, starting prints). Without them, status, progress, temps
+and pause/resume/cancel still work over the older TCP API, which allows one
+client at a time, so it can clash with FlashPrint or Orca. The camera is
+`http://<ip>:8080/?action=stream` (standard on the 5M Pro; an add-on for the
+5M).
+
+### Anycubic Kobra X / Kobra 3 / S1
+
+Turn on **LAN Mode** (Settings →
+Network). There are no credentials to enter: the hub gets them from the
+printer. In cloud mode the hub reports "Printer is in cloud mode". The Kobra X
+only has WiFi; once LAN Mode is on you can block its internet access in your
+router. The camera is the printer's FLV stream, with still snapshots as a
+fallback.
+
+### Network
+
+The machine running the hub has to reach the printers' addresses. If they're
+on another VLAN, your router or firewall has to allow it.
+

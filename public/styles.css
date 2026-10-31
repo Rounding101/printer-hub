@@ -506,3 +506,7 @@ dialog.wide { width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 32
   .ps-slicer .form-row { grid-template-columns: 1fr; }
   .dlg-actions { flex-wrap: wrap; }
 }
+.setup-cmd {
+  display: block; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}

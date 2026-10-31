@@ -1,0 +1,27 @@
+name: Support another printer
+description: Ask for a printer or firmware Printer Hub can't connect to yet.
+labels: [new printer]
+body:
+  - type: markdown
+    attributes:
+      value: "First check whether your printer runs Klipper or can be connected through OctoPrint: both already work. Bambu Lab is planned."
+  - type: input
+    id: model
+    attributes:
+      label: Printer model
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: How does it talk on the network?
+      description: The app or slicer it works with, its LAN mode, and any documentation or open-source projects that control it.
+    validations:
+      required: true
+  - type: dropdown
+    id: help
+    attributes:
+      label: Could you help test it?
+      options:
+        - Yes, I can test changes on my printer
+        - Not right now

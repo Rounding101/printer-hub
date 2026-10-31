@@ -4,11 +4,15 @@ FROM ubuntu:24.04 AS step2stl
 ARG OCCT_RUNTIME="libocct-data-exchange-7.6t64 libocct-modeling-algorithms-7.6t64"
 # Runtime libraries only, plus the headers unpacked from the -dev packages:
 # installing those properly drags in GL/X11/FreeImage dev packages we don't use.
-ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev libocct-ocaf-dev libocct-visualization-dev"
+# The ocaf/visualization headers aren't needed and their downloads have failed
+# on the build host, so they're best effort.
+ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev"
+ARG OCCT_DEV_EXTRA="libocct-ocaf-dev libocct-visualization-dev"
 RUN apt-get -o Acquire::Retries=5 update \
     && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
       g++ $OCCT_RUNTIME \
     && mkdir /tmp/debs && cd /tmp/debs && apt-get -o Acquire::Retries=5 download $OCCT_DEV \
+    && for p in $OCCT_DEV_EXTRA; do apt-get -o Acquire::Retries=5 download "$p" || echo "skipped $p"; done \
     && for d in *.deb; do dpkg -x "$d" /occt; done \
     && test -f /occt/usr/include/opencascade/STEPControl_Reader.hxx \
     && rm -rf /tmp/debs /var/lib/apt/lists/* \

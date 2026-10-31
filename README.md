@@ -1,9 +1,50 @@
 # Printer Hub
 
-One page for all your printers: live status, cameras, progress, temps, and
-pause / resume / cancel / start-print / light controls.
+[![Slicer image](https://github.com/Shawman511/printer-hub/actions/workflows/slicer-build.yml/badge.svg)](https://github.com/Shawman511/printer-hub/actions/workflows/slicer-build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Supported:
+A self-hosted control room for your 3D printers on your own network. It
+connects to stock-firmware **FlashForge Adventurer 5M** and **Anycubic Kobra X**
+printers directly, with no vendor cloud. It shows them all in one place:
+live status and cameras, full manual control, a file library with a built-in
+OrcaSlicer, a print job log, and filament tracking.
+
+![Printer Hub dashboard: one printer printing, one preparing to print](docs/screenshots/dashboard.png)
+
+## Features
+
+- **Live dashboard:** status, progress, layers, time remaining, temperatures
+  and camera for every printer, pushed to the browser as it changes. Printers
+  getting ready (file check, leveling, heating) show what they're preparing
+  and the estimated print time.
+- **Control panel:** pause, resume, cancel, light, jog and home, nozzle and
+  bed temperatures with presets, fan and speed, all checked against safety
+  limits on the server.
+- **Library and slicing:** keep G-code and models on the hub. Slice STL, OBJ,
+  3MF and STEP files with OrcaSlicer's own profiles for each printer, preview
+  models in 3D, and send them to a printer in one step. Files sliced for a
+  different printer are refused before they reach it.
+- **Multi-color:** map a file's colors to the Kobra X's ACE slots, with a
+  suggested match by material and color.
+- **Filament rolls:** tracks how much is left on each roll from what each
+  print used.
+- **Job log and totals:** every print is logged automatically, with items per
+  plate, print hours, success rate and CSV export.
+- **Sign-in and roles:** admin, operator and watch-only viewer accounts.
+- **Works on a phone:** the same app, laid out for small screens.
+
+| | |
+| --- | --- |
+| ![Control panel](docs/screenshots/control.png) | ![Library](docs/screenshots/library.png) |
+| **Control panel:** camera, motion, temperatures, fans and filament | **Library:** print files with the printer and settings they were sliced for |
+| ![Slice dialog](docs/screenshots/slice.png) | ![3D preview](docs/screenshots/preview.png) |
+| **Slice:** OrcaSlicer profiles, copies, infill, supports, walls | **Preview:** 3D view with dimensions |
+| ![Job log](docs/screenshots/jobs.png) | ![Totals](docs/screenshots/totals.png) |
+| **Job log:** every print, outcome, items and filament | **Totals:** items, plates and hours per model |
+
+<p align="center"><img src="docs/screenshots/mobile.png" alt="Printer Hub on a phone" width="300"></p>
+
+### Supported printers
 
 | Printer | Type | How it connects |
 | --- | --- | --- |
@@ -11,16 +52,26 @@ Supported:
 | Anycubic Kobra X / Kobra 3 / S1 | `anycubic` | Stock-firmware **LAN Mode**: signed handshake on port 18910, then MQTT over TLS (port 9883) |
 | Simulator | `mock` | For trying the UI with no hardware |
 
-## Run it
+Other printers can be added as a driver (see [How it works](#how-it-works)).
+Only the Adventurer 5M and Kobra X have been tested on real hardware.
+
+## Try it
+
+You need Node.js 18 or newer. The demo runs two simulated printers, so no
+hardware is needed:
 
 ```bash
 npm install
-npm start          # uses config.json (created from config.example.json on first run)
-npm run demo       # two simulated printers, no hardware needed
+npm run demo
 ```
 
-Open http://localhost:3000. Any device on your network can use
-`http://<this-pc-ip>:3000`.
+Open http://localhost:3000. On first run the terminal prints a one-time
+**setup code**; enter it to create your admin account.
+
+With real printers, `npm start` uses `config.json` (created from
+`config.example.json` on first run; see [Configure](#configure-configjson)).
+Any device on your network can then use `http://<this-pc-ip>:3000`. Slicing
+needs the `slicer` container, so for the full app use Docker (below).
 
 ## Run with Docker / Dockhand
 
@@ -260,3 +311,29 @@ API (needs a session cookie from `POST /api/auth/login`): `GET /api/printers`, `
 
 Even with sign-in, keep the hub on your home network or behind a VPN. Don't
 port-forward it to the internet.
+
+## Contributing
+
+Issues and pull requests are welcome. `npm run demo` gives you a full UI with
+simulated printers. Changes to `slicer/` are checked by the
+[slicer-build](.github/workflows/slicer-build.yml) workflow, which builds the
+image, runs its self-test and slices a real STEP file.
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
+
+## Disclaimer
+
+Printer Hub controls real heaters and motors. Don't leave printers
+unattended because the hub says a print is going well, and stay within
+your printer's own limits. It talks to the printers' local APIs, which their
+makers don't document, so a firmware update can change or break things.
+
+This is an independent project. It isn't affiliated with or endorsed by
+FlashForge, Anycubic or the OrcaSlicer project. Product names are trademarks
+of their owners.
+
+## License
+
+[MIT](LICENSE). The slicer image downloads [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)
+(AGPL-3.0) and installs [Open CASCADE Technology](https://dev.opencascade.org/)
+(LGPL-2.1) from Ubuntu at build time; neither is included in this repository.

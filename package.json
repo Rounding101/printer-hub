@@ -1,8 +1,23 @@
 {
   "name": "printer-hub",
-  "version": "0.9.6",
+  "version": "0.10.0",
   "released": "2026-10-31",
-  "description": "Central dashboard for FlashForge AD5M and Anycubic Kobra X printers",
+  "description": "Self-hosted dashboard, control panel, slicer and job log for FlashForge Adventurer 5M and Anycubic Kobra X printers",
+  "keywords": [
+    "3d-printing",
+    "flashforge",
+    "adventurer-5m",
+    "anycubic",
+    "kobra-x",
+    "orcaslicer",
+    "dashboard",
+    "self-hosted"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shawman511/printer-hub.git"
+  },
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

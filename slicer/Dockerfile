@@ -1,15 +1,23 @@
 # Orca's CLI can't read STEP, so build a small OpenCASCADE converter. The list
 # of Ubuntu packages its libraries come from goes along to the final image.
 FROM ubuntu:24.04 AS step2stl
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      g++ libocct-data-exchange-dev libocct-modeling-algorithms-dev \
-      libocct-modeling-data-dev libocct-foundation-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Runtime libraries only, plus the headers unpacked from the -dev packages:
+# installing those properly drags in GL/X11/FreeImage dev packages we don't use.
+ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev"
+RUN apt-get -o Acquire::Retries=5 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+      g++ libocct-data-exchange-7.6t64 libocct-modeling-algorithms-7.6t64 \
+    && mkdir /tmp/debs && cd /tmp/debs && apt-get -o Acquire::Retries=5 download $OCCT_DEV \
+    && for d in *.deb; do dpkg -x "$d" /occt; done \
+    && test -f /occt/usr/include/opencascade/STEPControl_Reader.hxx \
+    && rm -rf /tmp/debs /var/lib/apt/lists/*
 COPY step2stl.cpp /src/
+# Linked by soname since the unversioned .so links come with the -dev packages.
 # ldd may print /lib paths; dpkg knows the files under /usr/lib.
-RUN mkdir /out && g++ -O2 -o /out/step2stl /src/step2stl.cpp -I/usr/include/opencascade \
-      -lTKSTEP -lTKXSBase -lTKSTL -lTKMesh -lTKBO -lTKPrim -lTKTopAlgo -lTKBRep \
-      -lTKG3d -lTKGeomBase -lTKMath -lTKernel \
+RUN mkdir /out && g++ -O2 -o /out/step2stl /src/step2stl.cpp -I/occt/usr/include/opencascade \
+      -l:libTKSTEP.so.7.6 -l:libTKXSBase.so.7.6 -l:libTKSTL.so.7.6 -l:libTKMesh.so.7.6 \
+      -l:libTKBO.so.7.6 -l:libTKPrim.so.7.6 -l:libTKTopAlgo.so.7.6 -l:libTKBRep.so.7.6 \
+      -l:libTKG3d.so.7.6 -l:libTKGeomBase.so.7.6 -l:libTKMath.so.7.6 -l:libTKernel.so.7.6 \
     && /out/step2stl --make-test /out/test.step \
     && /out/step2stl /out/test.step /tmp/test.stl && test -s /tmp/test.stl \
     && ldd /out/step2stl | awk '$2 == "=>" {print $3}' | sed 's#^/lib/#/usr/lib/#' \
@@ -54,8 +62,8 @@ RUN sh /tmp/install-missing-libs.sh /opt/orca && rm /tmp/install-missing-libs.sh
 
 # STEP converter plus the OpenCASCADE runtime libraries it links.
 COPY --from=step2stl /out/ /opt/step2stl/
-RUN apt-get update \
-    && xargs apt-get install -y --no-install-recommends < /opt/step2stl/packages \
+RUN apt-get -o Acquire::Retries=5 update \
+    && xargs apt-get -o Acquire::Retries=5 install -y --no-install-recommends < /opt/step2stl/packages \
     && rm -rf /var/lib/apt/lists/* \
     && /opt/step2stl/step2stl /opt/step2stl/test.step /tmp/test.stl && rm /tmp/test.stl
 

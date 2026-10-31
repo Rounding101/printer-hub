@@ -1,0 +1,15 @@
+# Builds the slicer image (converter stage first, for a quick, readable log).
+name: slicer-build
+on:
+  push:
+    branches: [ci/slicer-build]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Converter stage
+        run: docker build --progress=plain --target step2stl -t step2stl-test slicer
+      - name: Full slicer image (runs the slice self-test)
+        run: docker build --progress=plain -t slicer-test slicer

@@ -153,7 +153,9 @@ async function slice(req) {
       model = path.join(dir, path.basename(input).replace(/\.(step|stp)$/i, '.stl'));
       const conv = await run(STEP2STL_BIN, [input, model], dir);
       if (conv.code !== 0 || !fs.existsSync(model)) {
-        const why = conv.out.split('\n').map((l) => l.trim()).filter(Boolean).slice(-2).join(' · ');
+        // Prefer step2stl's own message over OpenCASCADE's (coloured) parser output.
+        const lines = conv.out.replace(/\x1b\[[0-9;]*m/g, '').split('\n').map((l) => l.trim()).filter(Boolean);
+        const why = (lines.filter((l) => l.startsWith('STEP error:')).pop() || lines.pop() || '').replace(/^STEP error:\s*/, '');
         throw new Error(`Couldn't convert the STEP file: ${why || conv.signal || `exit ${conv.code}`}`);
       }
     }

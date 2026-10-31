@@ -13,3 +13,22 @@ jobs:
         run: docker build --progress=plain --target step2stl -t step2stl-test slicer
       - name: Full slicer image (runs the slice self-test)
         run: docker build --progress=plain -t slicer-test slicer
+      - name: Slice a real STEP file through the HTTP API
+        run: |
+          mkdir -p data/models && chmod -R 777 data
+          curl -fsSL -o data/models/to220.step "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/master/Package_TO_SOT_THT.3dshapes/TO-220-3_Vertical.step"
+          echo "not a step file" > data/models/broken.step
+          docker run -d --name slicer -v "$PWD/data:/data" -p 8080:8080 slicer-test
+          for i in $(seq 1 30); do curl -sf localhost:8080/health && break; sleep 1; done; echo
+          curl -sf localhost:8080/health | jq -e '.step == true'
+          for m in "Anycubic|Anycubic Kobra X 0.4 nozzle" "Flashforge|Flashforge Adventurer 5M 0.4 Nozzle"; do
+            v=${m%%|*}; mc=${m#*|}
+            prof=$(curl -sfG localhost:8080/profiles --data-urlencode "vendor=$v" --data-urlencode "machine=$mc")
+            body=$(jq -n --arg v "$v" --arg m "$mc" --argjson p "$prof" \
+              '{input:"/data/models/to220.step", vendor:$v, machine:$m, process:$p.defaults.process, filament:$p.defaults.filament, copies:2, orient:true, options:{infill:15, supports:"off", walls:2}}')
+            res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$mc: $res"
+            echo "$res" | jq -e '.stats.layers > 10 and .stats.grams > 0 and .copies == 2'
+          done
+          res=$(curl -s -X POST localhost:8080/slice -d '{"input":"/data/models/broken.step","vendor":"Anycubic","machine":"Anycubic Kobra X 0.4 nozzle"}'); echo "broken: $res"
+          echo "$res" | jq -e '.error | test("convert the STEP")'
+          docker logs slicer | tail -5

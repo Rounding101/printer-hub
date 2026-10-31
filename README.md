@@ -43,6 +43,11 @@ GitHub repo to redeploy on push.
 The Docker host has to be able to reach both printers' IPs. If they're on
 other VLANs, the host's routing or firewall has to allow it.
 
+**Which version is running:** the top bar shows it under the name (e.g.
+`v0.9 · Oct 31, 2026`), from `version` and `released` in `package.json`; bump
+both with each change. Hover it for the slicer's OrcaSlicer version and
+whether its image can slice STEP files.
+
 ## Sign-in and users
 
 The hub controls real printers, so every page and API call needs a signed-in

@@ -192,7 +192,7 @@ async function slice(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
-    if (url.pathname === '/health') return json(res, 200, { ok: true, version, busy });
+    if (url.pathname === '/health') return json(res, 200, { ok: true, version, busy, step: fs.existsSync(STEP2STL_BIN) });
     if (url.pathname === '/profiles') {
       const vendor = url.searchParams.get('vendor');
       const machine = url.searchParams.get('machine');

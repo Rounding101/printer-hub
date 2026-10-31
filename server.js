@@ -10,6 +10,7 @@ const { Library } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
 const { SpoolStore } = require('./lib/spools');
 const { AuthStore, allowed } = require('./lib/auth');
+const { version: HUB_VERSION, released: HUB_RELEASED } = require('./package.json');
 
 const DRIVERS = { flashforge: FlashForgeDriver, anycubic: AnycubicDriver, mock: MockDriver };
 
@@ -160,7 +161,7 @@ async function slicerHealth() {
   if (Date.now() - slicerStatus.checkedAt < 30000) return slicerStatus;
   try {
     const h = await slicerCall('/health', null, 3000);
-    slicerStatus = { available: true, version: h.version, busy: h.busy, checkedAt: Date.now() };
+    slicerStatus = { available: true, version: h.version, step: !!h.step, busy: h.busy, checkedAt: Date.now() };
   } catch (err) {
     slicerStatus = { available: false, error: err.message, checkedAt: Date.now() };
   }
@@ -249,7 +250,11 @@ function sameOrigin(req) {
 async function authRoutes(req, res, url, parts, ctx) {
   const ip = clientIp(req);
   if (url.pathname === '/api/auth/me' && req.method === 'GET') {
-    return json(res, 200, { user: ctx?.user || null, setup: auth.needsSetup() }), true;
+    return json(res, 200, {
+      user: ctx?.user || null,
+      setup: auth.needsSetup(),
+      ...(ctx ? { hub: { version: HUB_VERSION, released: HUB_RELEASED } } : {}),
+    }), true;
   }
   if (url.pathname === '/api/auth/setup' && req.method === 'POST') {
     const body = await readBody(req);
@@ -464,7 +469,7 @@ const server = http.createServer(async (req, res) => {
       if (!parts[2]) {
         const h = await slicerHealth();
         const supported = [...printers.values()].filter((p) => slicerProfileFor(p)).map((p) => p.state.id);
-        return json(res, 200, { available: h.available, version: h.version || null, error: h.error || null, printers: supported });
+        return json(res, 200, { available: h.available, version: h.version || null, step: !!h.step, error: h.error || null, printers: supported });
       }
       if (parts[2] === 'profiles') {
         const p = printers.get(url.searchParams.get('printerId'));

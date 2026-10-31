@@ -32,7 +32,20 @@ const Account = (() => {
     $('me').querySelector('.me-name').textContent = me.username;
     $('me').querySelector('.me-role').textContent = me.role === 'operator' ? '' : ROLE_LABEL[me.role];
     $('nav-users').hidden = me.role !== 'admin';
+    if (data.hub) showVersion(data.hub);
     return me;
+  }
+
+  // "v0.9 · Oct 31, 2026" next to the name; the tooltip adds the slicer.
+  async function showVersion(hub) {
+    const el = $('version');
+    const short = hub.version.replace(/\.0$/, '');
+    const date = hub.released ? new Date(`${hub.released}T12:00:00`).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+    el.textContent = `v${short}${date ? ` · ${date}` : ''}`;
+    el.title = `Printer Hub ${hub.version}${date ? `, released ${date}` : ''}`;
+    const s = await api('/api/slicer').catch(() => null);
+    el.title += !s ? '' : !s.available ? '\nSlicer: not reachable'
+      : `\nSlicer: OrcaSlicer ${s.version || '?'}, STEP files ${s.step ? 'supported' : 'not supported (old slicer image)'}`;
   }
 
   // Short device name from a user agent string.

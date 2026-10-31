@@ -29,6 +29,6 @@ jobs:
             res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$mc: $res"
             echo "$res" | jq -e '.stats.layers > 10 and .stats.grams > 0 and .copies == 2'
           done
-          res=$(curl -s -X POST localhost:8080/slice -d '{"input":"/data/models/broken.step","vendor":"Anycubic","machine":"Anycubic Kobra X 0.4 nozzle"}'); echo "broken: $res"
+          res=$(curl -s -X POST localhost:8080/slice -d "$(echo "$body" | jq '.input = "/data/models/broken.step"')"); echo "broken: $res"
           echo "$res" | jq -e '.error | test("convert the STEP")'
           docker logs slicer | tail -5

@@ -32,6 +32,8 @@ class MockDriver extends PrinterDriver {
     const bedTarget = hot ? 60 : this.manual.bed;
     s.nozzle = approach(s.nozzle, nozzleTarget || 24);
     s.bed = approach(s.bed, bedTarget || 23);
+    // Like the Kobra X: a few seconds of file check and leveling before heating.
+    if (s.status === 'preparing' && --s.prepTicks <= 0) s.status = 'heating';
     if (s.status === 'heating' && s.nozzle > 210) s.status = 'printing';
     if (s.status === 'printing') {
       s.progress = Math.min(100, s.progress + 0.4 * (this.cfg.speed || 1));
@@ -67,8 +69,9 @@ class MockDriver extends PrinterDriver {
         progress: Math.round(s.progress * 10) / 10,
         layer: Math.round((s.progress / 100) * total),
         totalLayers: total,
-        elapsed: Math.round(s.progress * 54),
-        remaining: Math.round((100 - s.progress) * 54),
+        elapsed: s.status === 'preparing' ? null : Math.round(s.progress * 54),
+        remaining: s.status === 'preparing' ? null : Math.round((100 - s.progress) * 54),
+        ...(s.status === 'preparing' ? { stage: s.prepTicks > 4 ? 'Checking file' : 'Auto-leveling', estimate: 100 * 54 } : {}),
         grams: 20, // like the AD5M's own job filament estimate
         thumb: false,
       } : null,
@@ -95,7 +98,7 @@ class MockDriver extends PrinterDriver {
   }
   async startPrint(file, opts = {}) {
     this.lastStart = { file, ...opts };
-    Object.assign(this.sim, { status: 'heating', file, progress: 0 });
+    Object.assign(this.sim, { status: 'preparing', prepTicks: 10, file, progress: 0 });
     this.tick();
   }
   async control(raw) {

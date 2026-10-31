@@ -62,8 +62,21 @@ auth.on('revoked', (ids) => {
   for (const [res, sid] of clients) if (ids.includes(sid)) { res.end(); clients.delete(res); }
 });
 
+// "1h 23m 4s" / "1d 2h 3m" (slicer headers) -> seconds.
+function parseDuration(text) {
+  const units = { d: 86400, h: 3600, m: 60, s: 1 };
+  let total = 0;
+  for (const [, n, u] of String(text || '').matchAll(/(\d+(?:\.\d+)?)\s*([dhms])/gi)) total += Number(n) * units[u.toLowerCase()];
+  return total || null;
+}
+
 for (const driver of printers.values()) {
   driver.on('update', (state) => {
+    // Before the printer reports a remaining time (e.g. while preparing), use
+    // the slicer's estimate from the library copy of the file.
+    if (state.job?.file && !state.job.remaining && state.job.estimate === undefined) {
+      state.job.estimate = parseDuration(library.findByName(state.job.file)?.estimate);
+    }
     jobs.observe(state);
     broadcast('printer', state);
   });

@@ -92,6 +92,19 @@ function mapStatus(infoState, project) {
   return s ? 'busy' : 'idle';
 }
 
+const ENDED = new Set(['finish', 'finished', 'complete', 'failed', 'stoped', 'stopped', 'canceled', 'cancelled']);
+const STAGES = { downloading: 'Downloading file', checking: 'Checking file', auto_leveling: 'Auto-leveling', leveling: 'Auto-leveling' };
+
+// What the printer says it's doing before the first layer, e.g. "auto_leveling"
+// -> "Auto-leveling"; null for generic states.
+function stageLabel(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (!s || ['busy', 'printing', 'free', 'idle', 'ready'].includes(s)) return null;
+  if (STAGES[s]) return STAGES[s];
+  const t = s.replace(/[_-]+/g, ' ');
+  return t[0].toUpperCase() + t.slice(1);
+}
+
 class AnycubicDriver extends PrinterDriver {
   constructor(cfg, opts) {
     super(cfg, opts);
@@ -223,7 +236,17 @@ class AnycubicDriver extends PrinterDriver {
   render() {
     const t = this.info.temp || {};
     const p = this.project;
-    const status = mapStatus(this.info.state, p);
+    let status = mapStatus(this.info.state, p);
+    // Before the first layer (download, file check, leveling) the printer just
+    // says "busy". If we know the file, call it preparing instead. A print the
+    // hub started counts for a minute even before the printer reports anything.
+    const ps = p?.state?.toLowerCase();
+    const starting = this.starting && Date.now() - this.starting.at < 30 * 60 * 1000 ? this.starting : null;
+    const prepFile = (p?.filename && !ENDED.has(ps) && p.filename) || starting?.file;
+    if (prepFile && (status === 'busy' || (status === 'idle' && starting && Date.now() - starting.at < 60 * 1000))) {
+      status = 'preparing';
+    }
+    if (status !== 'preparing' && status !== 'busy') this.starting = null;
     const active = ['printing', 'pausing', 'paused', 'cancelling', 'heating', 'completed'].includes(status);
     this.update({
       online: true,
@@ -252,6 +275,15 @@ class AnycubicDriver extends PrinterDriver {
         totalLayers: p.total_layers || 0,
         elapsed: p.print_time != null ? p.print_time * 60 : null, // printer reports minutes
         remaining: p.remain_time != null ? p.remain_time * 60 : null,
+        thumb: false,
+      } : status === 'preparing' ? {
+        file: prepFile,
+        progress: 0,
+        layer: 0,
+        totalLayers: p?.total_layers || 0,
+        elapsed: null,
+        remaining: p?.remain_time > 0 ? p.remain_time * 60 : null,
+        stage: stageLabel(ps) || stageLabel(this.info.state),
         thumb: false,
       } : null,
     });
@@ -434,6 +466,8 @@ class AnycubicDriver extends PrinterDriver {
         model_objects_skip_parts: [],
       },
     }, 20000, 'slicer');
+    this.starting = { file: filename, at: Date.now() };
+    this.render();
   }
 
   async upload(filename, data) {

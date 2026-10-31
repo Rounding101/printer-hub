@@ -3,7 +3,7 @@ const tpl = document.getElementById('card-tpl');
 const cards = new Map(); // id -> { el, state, camKind, player }
 
 const STATUS_LABEL = {
-  offline: 'Offline', idle: 'Ready', heating: 'Heating', printing: 'Printing', pausing: 'Pausing',
+  offline: 'Offline', idle: 'Ready', preparing: 'Preparing', heating: 'Heating', printing: 'Printing', pausing: 'Pausing',
   paused: 'Paused', cancelling: 'Cancelling', completed: 'Done', busy: 'Busy', error: 'Error',
 };
 const ACTIVE = ['printing', 'pausing', 'paused', 'heating'];
@@ -16,6 +16,8 @@ function dur(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
   return h ? `${h}h ${m}m` : `${m}m`;
 }
+// "Auto-leveling · Est. print time 1h 23m" for a printer getting ready to print.
+const prepLine = (job) => [job.stage || 'Getting ready', job.estimate && `Est. print time ${dur(job.estimate)}`].filter(Boolean).join(' · ');
 const deg = (t) => (t == null ? '—' : `${Math.round(t)}°`);
 
 function toast(msg, bad = false) {
@@ -156,13 +158,16 @@ function render(state) {
   q('.nojob').hidden = !!job;
   q('.nojob').textContent = state.online ? 'No active job' : 'Waiting for printer…';
   if (job) {
-    q('.file').textContent = job.file || 'Untitled';
+    const prep = s === 'preparing';
+    q('.file').textContent = prep ? `Preparing ${job.file || 'print'}` : job.file || 'Untitled';
     q('.file').title = job.file || '';
+    q('.stage').hidden = !prep;
+    q('.stage').textContent = prep ? prepLine(job) : '';
     q('.fill').style.width = `${Math.min(100, job.progress || 0)}%`;
     q('.pct').textContent = `${(job.progress || 0).toFixed(job.progress % 1 ? 1 : 0)}%`;
     q('.layer').textContent = job.totalLayers ? `${job.layer} / ${job.totalLayers}` : '—';
     q('.elapsed').textContent = dur(job.elapsed);
-    q('.remaining').textContent = ACTIVE.includes(s) ? dur(job.remaining) : '—';
+    q('.remaining').textContent = ACTIVE.includes(s) ? dur(job.remaining) : prep && job.estimate ? `~${dur(job.estimate)}` : '—';
   }
 
   const temps = q('.temps');
@@ -184,11 +189,12 @@ function render(state) {
   const on = state.online;
   q('.act-pause').hidden = !(on && caps.pause && (s === 'printing' || s === 'heating'));
   q('.act-resume').hidden = !(on && caps.resume && s === 'paused');
-  q('.act-cancel').hidden = !(on && caps.cancel && ['printing', 'heating', 'pausing', 'paused'].includes(s));
+  q('.act-cancel').hidden = !(on && caps.cancel && ['preparing', 'printing', 'heating', 'pausing', 'paused'].includes(s));
   q('.act-print').hidden = !(on && caps.files && ['idle', 'completed'].includes(s));
   q('.act-light').hidden = !(on && caps.light && state.light != null);
-  q('.act-light').setAttribute('aria-pressed', String(!!state.light));
-  q('.act-light').textContent = state.light ? 'Light on' : 'Light off';
+  q('.act-light').setAttribute('aria-checked', String(!!state.light));
+  q('.act-light').tabIndex = document.body.dataset.role === 'viewer' ? -1 : 0; // shown, not switchable
+  q('.act-light').title = state.light ? 'Light is on. Click to turn it off.' : 'Light is off. Click to turn it on.';
 
   // The dashboard and control view each hold a camera stream; only run the visible one.
   if (document.querySelector('.view[data-view="control"]').hidden) mountCamera(card);
@@ -201,7 +207,7 @@ function render(state) {
 
 function updateSummary() {
   const all = [...cards.values()].map((c) => c.state);
-  const printing = all.filter((p) => ['printing', 'heating', 'pausing'].includes(p.status)).length;
+  const printing = all.filter((p) => ['preparing', 'printing', 'heating', 'pausing'].includes(p.status)).length;
   const paused = all.filter((p) => p.status === 'paused').length;
   const offline = all.filter((p) => !p.online).length;
   const parts = [`${printing} printing`];

@@ -1,5 +1,5 @@
 // Per-printer control view (#control/<id>): camera, status, jog, temperatures,
-// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), cards,
+// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), prepLine(), cards,
 // mountCamera(), confirmCancel() and STATUS_LABEL from app.js.
 const Control = (() => {
   const $ = (id) => document.getElementById(id);
@@ -12,7 +12,7 @@ const Control = (() => {
   let uploadMode = 'upload';
   const editing = new Set(); // inputs the user is touching; don't overwrite them from live updates
 
-  const BUSY = ['printing', 'pausing', 'paused', 'heating', 'cancelling', 'busy'];
+  const BUSY = ['preparing', 'printing', 'pausing', 'paused', 'heating', 'cancelling', 'busy'];
 
   async function send(cmd, label) {
     try {
@@ -63,15 +63,20 @@ const Control = (() => {
     $('ctl-pill').textContent = STATUS_LABEL[s] || s;
     $('ctl-pill').dataset.s = s;
     root.dataset.s = s;
-    $('ctl-file-name').textContent = job?.file || (state.online ? 'No active job' : 'Printer offline');
+    const prep = s === 'preparing' && job;
+    $('ctl-file-name').textContent = prep ? `Preparing ${job.file || 'print'}` : job?.file || (state.online ? 'No active job' : 'Printer offline');
+    $('ctl-stage').hidden = !prep;
+    $('ctl-stage').textContent = prep ? prepLine(job) : '';
     $('ctl-file-name').title = job?.file || '';
     $('ctl-fill').style.width = `${Math.min(100, job?.progress || 0)}%`;
     $('ctl-pct').textContent = job ? `${(job.progress || 0).toFixed(job.progress % 1 ? 1 : 0)}%` : '—';
     $('ctl-layer').textContent = job?.totalLayers ? `${job.layer} / ${job.totalLayers}` : '—';
-    const remaining = job && BUSY.includes(s) ? job.remaining : null;
-    $('ctl-remaining').textContent = remaining ? dur(remaining) : '—';
+    // While preparing, the slicer estimate stands in (marked ~: setup time isn't included).
+    const remaining = job && BUSY.includes(s) ? job.remaining || (prep ? job.estimate : null) : null;
+    const approx = prep && !job.remaining ? '~' : '';
+    $('ctl-remaining').textContent = remaining ? approx + dur(remaining) : '—';
     $('ctl-eta').textContent = remaining
-      ? new Date(Date.now() + remaining * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+      ? approx + new Date(Date.now() + remaining * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
       : '—';
     $('ctl-err').hidden = !state.error;
     $('ctl-err').textContent = state.error || '';
@@ -79,10 +84,10 @@ const Control = (() => {
     const act = (name) => root.querySelector(`[data-act="${name}"]`);
     act('pause').hidden = !(state.online && (s === 'printing' || s === 'heating'));
     act('resume').hidden = !(state.online && s === 'paused');
-    act('cancel').hidden = !(state.online && ['printing', 'heating', 'pausing', 'paused'].includes(s));
+    act('cancel').hidden = !(state.online && ['preparing', 'printing', 'heating', 'pausing', 'paused'].includes(s));
     act('light').hidden = !(state.online && caps.light && state.light != null);
-    act('light').textContent = state.light ? 'Light on' : 'Light off';
-    act('light').setAttribute('aria-pressed', String(!!state.light));
+    act('light').setAttribute('aria-checked', String(!!state.light));
+    act('light').title = state.light ? 'Light is on. Click to turn it off.' : 'Light is off. Click to turn it on.';
     act('motorsOff').hidden = !ctl.motorsOff;
     act('motorsOff').disabled = busy || !state.online;
 
@@ -365,8 +370,11 @@ const Control = (() => {
     act('pause', simple('pause'));
     act('resume', simple('resume'));
     act('cancel', () => confirmCancel({ state: view.state }, simple('cancel')));
-    act('light', async () => {
+    act('light', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
       try { await api(`/api/printers/${enc(printerId)}/light`, { body: { on: !view.state.light } }); } catch (err) { toast(err.message, true); }
+      finally { btn.disabled = false; }
     });
     act('motorsOff', () => send({ action: 'motorsOff' }, 'Motors off'));
 

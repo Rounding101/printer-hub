@@ -64,7 +64,7 @@ class PrinterDriver extends EventEmitter {
 
   validateControl(cmd) {
     const limits = this.limits || { nozzle: 300, bed: 110, jog: 100 };
-    const busy = ['printing', 'pausing', 'paused', 'heating', 'cancelling', 'busy'].includes(this.state.status);
+    const busy = ['preparing', 'printing', 'pausing', 'paused', 'heating', 'cancelling', 'busy'].includes(this.state.status);
     if (!this.state.online) throw new Error('Printer is offline');
     switch (cmd.action) {
       case 'jog': {

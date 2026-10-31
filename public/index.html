@@ -59,6 +59,7 @@
           <span class="pill" id="ctl-pill"></span>
         </div>
         <p class="file" id="ctl-file-name"></p>
+        <p class="stage" id="ctl-stage" hidden></p>
         <div class="bar"><div class="fill" id="ctl-fill"></div></div>
         <dl class="ctl-facts">
           <div><dt>Progress</dt><dd id="ctl-pct">—</dd></div>
@@ -70,7 +71,7 @@
           <button class="btn" data-act="pause" type="button">Pause</button>
           <button class="btn primary" data-act="resume" type="button">Resume</button>
           <button class="btn danger" data-act="cancel" type="button">Cancel</button>
-          <button class="btn ghost" data-act="light" type="button">Light</button>
+          <button class="switch" data-act="light" type="button" role="switch" aria-checked="false"><span class="switch-track" aria-hidden="true"></span>Light</button>
           <button class="btn ghost" data-act="motorsOff" type="button" title="Disable stepper motors">Motors off</button>
         </div>
         <p class="err" id="ctl-err" hidden></p>
@@ -230,6 +231,7 @@
 
         <div class="job">
           <p class="file"></p>
+          <p class="stage" hidden></p>
           <div class="bar"><div class="fill"></div></div>
           <div class="stats">
             <div><span class="k">Progress</span><span class="v pct">—</span></div>
@@ -248,7 +250,7 @@
           <button class="btn act-resume primary" type="button">Resume</button>
           <button class="btn act-cancel danger" type="button">Cancel</button>
           <button class="btn act-print primary" type="button">Start print…</button>
-          <button class="btn act-light ghost" type="button">Light</button>
+          <button class="switch act-light" type="button" role="switch" aria-checked="false"><span class="switch-track" aria-hidden="true"></span>Light</button>
           <a class="btn ghost act-controls" href="#">Controls</a>
         </div>
       </div>

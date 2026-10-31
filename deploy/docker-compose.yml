@@ -1,0 +1,30 @@
+# Printer Hub from published images. Download this file, then:
+#   docker compose up -d
+# and open http://<this machine>:3000. The first-run setup code is in
+#   docker compose logs printer-hub
+services:
+  printer-hub:
+    image: ghcr.io/shawman511/printer-hub:${HUB_VERSION:-latest}
+    container_name: printer-hub
+    restart: unless-stopped
+    ports:
+      - "${HUB_PORT:-3000}:3000"
+    environment:
+      SLICER_URL: http://slicer:8080
+      TZ: ${TZ:-UTC}
+    volumes:
+      - printer-hub-data:/data
+
+  # Slicing (OrcaSlicer). x86-64 only: on a Raspberry Pi or other ARM machine,
+  # delete this service and the SLICER_URL line above; everything else works.
+  slicer:
+    image: ghcr.io/shawman511/printer-hub-slicer:${HUB_VERSION:-latest}
+    container_name: printer-hub-slicer
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - printer-hub-data:/data
+
+volumes:
+  printer-hub-data:

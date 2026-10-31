@@ -1,13 +1,14 @@
 # Printer Hub
 
+[![Tests](https://github.com/Shawman511/printer-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/Shawman511/printer-hub/actions/workflows/ci.yml)
 [![Slicer image](https://github.com/Shawman511/printer-hub/actions/workflows/slicer-build.yml/badge.svg)](https://github.com/Shawman511/printer-hub/actions/workflows/slicer-build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A self-hosted control room for your 3D printers on your own network. It
-connects to stock-firmware **FlashForge Adventurer 5M** and **Anycubic Kobra X**
-printers directly, with no vendor cloud. It shows them all in one place:
-live status and cameras, full manual control, a file library with a built-in
-OrcaSlicer, a print job log, and filament tracking.
+A self-hosted control room for your 3D printers, on your own network and with
+no vendor cloud. Add your **Klipper**, **OctoPrint**, **Prusa**, **FlashForge**
+or **Anycubic** printers and see them all in one place: live status and
+cameras, manual control, a file library with a built-in OrcaSlicer, a print
+job log, and filament tracking.
 
 ![Printer Hub dashboard: one printer printing, one preparing to print](docs/screenshots/dashboard.png)
 
@@ -21,16 +22,19 @@ OrcaSlicer, a print job log, and filament tracking.
   bed temperatures with presets, fan and speed, all checked against safety
   limits on the server.
 - **Library and slicing:** keep G-code and models on the hub. Slice STL, OBJ,
-  3MF and STEP files with OrcaSlicer's own profiles for each printer, preview
-  models in 3D, and send them to a printer in one step. Files sliced for a
-  different printer are refused before they reach it.
+  3MF and STEP files with OrcaSlicer's profiles for your printer (about a
+  thousand printers from 64 brands), preview models in 3D, and send them to a
+  printer in one step. Files sliced for a different printer are refused before
+  they reach it.
 - **Multi-color:** map a file's colors to the Kobra X's ACE slots, with a
   suggested match by material and color.
 - **Filament rolls:** tracks how much is left on each roll from what each
   print used.
 - **Job log and totals:** every print is logged automatically, with items per
   plate, print hours, success rate and CSV export.
-- **Sign-in and roles:** admin, operator and watch-only viewer accounts.
+- **Set up in the browser:** add printers, test the connection and pick the
+  slicer profile under Settings. Sign-in with admin, operator and watch-only
+  viewer accounts.
 - **Works on a phone:** the same app, laid out for small screens.
 
 | | |
@@ -41,75 +45,147 @@ OrcaSlicer, a print job log, and filament tracking.
 | **Slice:** OrcaSlicer profiles, copies, infill, supports, walls | **Preview:** 3D view with dimensions |
 | ![Job log](docs/screenshots/jobs.png) | ![Totals](docs/screenshots/totals.png) |
 | **Job log:** every print, outcome, items and filament | **Totals:** items, plates and hours per model |
+| ![Settings: printers](docs/screenshots/settings.png) | ![Adding a printer](docs/screenshots/add-printer.png) |
+| **Settings:** your printers and their status | **Add a printer:** type, address, slicer profile, connection test |
 
 <p align="center"><img src="docs/screenshots/mobile.png" alt="Printer Hub on a phone" width="300"></p>
 
-### Supported printers
+## Supported printers
 
-| Printer | Type | How it connects |
-| --- | --- | --- |
-| FlashForge Adventurer 5M / 5M Pro | `flashforge` | Local HTTP API (port 8898) with serial + check code; falls back to the G-code TCP API (port 8899) if no check code is set |
-| Anycubic Kobra X / Kobra 3 / S1 | `anycubic` | Stock-firmware **LAN Mode**: signed handshake on port 18910, then MQTT over TLS (port 9883) |
-| Simulator | `mock` | For trying the UI with no hardware |
+| Type in Settings | Printers | Status | Control | Start prints | Camera |
+| --- | --- | --- | --- | --- | --- |
+| **Klipper (Moonraker)** | Voron, Creality K1 / Sonic Pad, Elegoo Neptune 4, Sovol, Qidi, RatRig and other Klipper printers with Mainsail or Fluidd | ✓ | ✓ | ✓ | ✓ (Moonraker webcams) |
+| **OctoPrint** | Any printer connected to OctoPrint / OctoPi (Creality Ender, Prusa MK3, most Marlin printers) | ✓ | ✓ | ✓ | ✓ (OctoPrint webcam) |
+| **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ | pause / resume / cancel | ✓ | stream URL only |
+| **FlashForge Adventurer 5M / 5M Pro** | Stock firmware, LAN-only mode | ✓ | ✓ | ✓ | ✓ |
+| **Anycubic Kobra X / Kobra 3 / S1** | Stock firmware, LAN Mode (incl. ACE multi-color) | ✓ | ✓ | ✓ | ✓ |
+| **Simulator** | A pretend printer for trying the hub | ✓ | ✓ | ✓ | ✓ |
 
-Other printers can be added as a driver (see [How it works](#how-it-works)).
-Only the Adventurer 5M and Kobra X have been tested on real hardware.
+The FlashForge and Anycubic drivers are used daily on real printers. The
+Klipper, OctoPrint and PrusaLink drivers follow those projects' documented
+APIs and are tested against simulated servers in [`test/`](test/), but haven't
+been run against every model. If something doesn't work with yours, please
+[open an issue](https://github.com/Shawman511/printer-hub/issues).
 
-## Try it
+Not supported yet: Bambu Lab, Elegoo Centauri (SDCP) and Creality printers on
+stock (non-Klipper) firmware. Adding a printer type is one file in
+[`drivers/`](drivers/); see [How it works](#how-it-works).
 
-You need Node.js 18 or newer. The demo runs two simulated printers, so no
-hardware is needed:
+## Install
+
+You need a machine on the same network as your printers that runs Docker, e.g.
+a small server, a NAS, or a Raspberry Pi.
+
+### With Docker (recommended)
+
+```bash
+mkdir printer-hub && cd printer-hub
+curl -fsSLO https://raw.githubusercontent.com/Shawman511/printer-hub/main/deploy/docker-compose.yml
+docker compose up -d
+```
+
+Then:
+
+1. Open `http://<that machine's IP>:3000`.
+2. Get the one-time **setup code** from the log and create your admin account:
+   `docker compose logs printer-hub | grep "setup code"`
+3. Click **Add a printer** and follow [Add your printers](#add-your-printers).
+
+This runs two containers: the hub, and the OrcaSlicer service for slicing.
+Data (accounts, printers, library, job log) lives in the `printer-hub-data`
+volume. To update: `docker compose pull && docker compose up -d`.
+
+**Raspberry Pi / ARM:** the hub image runs on ARM, but OrcaSlicer only ships
+x86-64 Linux builds. Remove the `slicer` service (and `SLICER_URL`) from the
+compose file; everything except slicing works, and you can still upload
+G-code you sliced on your computer.
+
+**Docker UIs** (Portainer, Dockhand, Unraid, …): create a stack from
+`deploy/docker-compose.yml`, or point a Git stack at this repository's
+`compose.yaml` to build from source on each update.
+
+### From source
+
+```bash
+git clone https://github.com/Shawman511/printer-hub.git
+cd printer-hub
+docker compose up -d --build   # hub + slicer, built locally
+```
+
+Or without Docker (Node.js 18+, no slicing):
 
 ```bash
 npm install
-npm run demo
+npm start        # your printers
+npm run demo     # or two simulated printers, no hardware needed
 ```
 
-Open http://localhost:3000. On first run the terminal prints a one-time
-**setup code**; enter it to create your admin account.
+Run the tests with `npm test`.
 
-With real printers, `npm start` uses `config.json` (created from
-`config.example.json` on first run; see [Configure](#configure-configjson)).
-Any device on your network can then use `http://<this-pc-ip>:3000`. Slicing
-needs the `slicer` container, so for the full app use Docker (below).
+## Add your printers
 
-## Run with Docker / Dockhand
+Admins add printers under **Settings → Printers → Add printer**:
 
-`compose.yaml` builds the image from this repo and keeps the job log in the
-`printer-hub-data` volume. Printer settings come from environment variables
-(see `.env.example`), which `config.docker.json` reads as `${NAME}`. That keeps
-the check code out of git.
+1. **Type:** pick how the printer is reached (table above).
+2. **Name** and **Address:** the printer's IP address or host name. Give it a
+   DHCP reservation in your router so the address doesn't change.
+3. The type's own settings (below).
+4. **Slice with:** the OrcaSlicer profile used when you slice models for this
+   printer: its brand, then the model and nozzle. For a printer that isn't
+   listed, **Custom** has generic Klipper and Marlin profiles.
+5. **Test connection**, then **Save**. The printer shows up on the dashboard
+   right away.
 
-```bash
-cp .env.example .env   # fill in AD5M_SERIAL / AD5M_CHECK_CODE
-docker compose up -d --build
-```
+Passwords and keys are stored on the server (`data/printers.json` in the data
+volume) and never sent back to the browser. Removing a printer keeps its job
+history.
 
-**Dockhand:** add this repository as a Git stack, point it at `compose.yaml`
-on `main`, and set `AD5M_HOST`, `AD5M_SERIAL`, `AD5M_CHECK_CODE` and
-`KOBRAX_HOST` as stack environment variables. `pull_policy: build` makes
-every redeploy rebuild from the new commit. Add Dockhand's webhook to the
-GitHub repo to redeploy on push.
+**Klipper (Moonraker):** use Moonraker's address; port 7125 is assumed unless
+you give one (e.g. `voron.local` or `192.168.1.60:7125`). An API key is only
+needed if Moonraker doesn't trust your hub's network (`[authorization]`
+`trusted_clients`). The camera comes from Moonraker's webcam settings. For a
+light switch, enter the name of the `[output_pin]` that drives your light.
 
-The Docker host has to be able to reach both printers' IPs. If they're on
-other VLANs, the host's routing or firewall has to allow it.
+**OctoPrint:** use OctoPrint's address (e.g. `octopi.local`, or a full URL such
+as `http://192.168.1.70:5000`), and an API key from OctoPrint's
+*Settings → Application Keys*. The camera comes from OctoPrint's webcam
+settings. OctoPrint must be connected to the printer.
 
-**Which version is running:** the top bar shows it under the name (e.g.
-`v0.9 · Oct 31, 2026`), from `version` and `released` in `package.json`; bump
-both with each change. Hover it for the slicer's OrcaSlicer version and
-whether its image can slice STEP files.
+**Prusa (PrusaLink):** turn on PrusaLink on the printer. The address and
+password are on its screen under *Settings → Network*; the username is `maker`.
+Older firmware shows an API key instead of a password. Prusa printers have no
+local camera stream, but you can enter one (e.g. a webcam on a Pi).
+
+**FlashForge Adventurer 5M / 5M Pro:** on the printer's screen, turn on
+**LAN-only mode** in the network settings; it then shows a **check code**. The
+serial number is under About / device info. With both you get everything
+(status, light, files, starting prints). Without them, status, progress, temps
+and pause/resume/cancel still work over the older TCP API, which allows one
+client at a time, so it can clash with FlashPrint or Orca. The camera is
+`http://<ip>:8080/?action=stream` (standard on the 5M Pro; an add-on for the
+5M).
+
+**Anycubic Kobra X / Kobra 3 / S1:** turn on **LAN Mode** (Settings →
+Network). There are no credentials to enter: the hub gets them from the
+printer. In cloud mode the hub reports "Printer is in cloud mode". The Kobra X
+only has WiFi; once LAN Mode is on you can block its internet access in your
+router. The camera is the printer's FLV stream, with still snapshots as a
+fallback.
+
+The machine running the hub has to reach the printers' addresses. If they're
+on another VLAN, your router or firewall has to allow it.
 
 ## Sign-in and users
 
 The hub controls real printers, so every page and API call needs a signed-in
 user. Only the sign-in page and `/api/health` are open.
 
-- **First run:** the hub prints a one-time **setup code** in its log. In
-  Dockhand, open the printer-hub container's logs and look for
-  `*** First run: ... setup code XXXXX-XXXXX`. Open the hub, enter the code,
-  and create the admin account. After that, the code is gone.
-- **Users** (admins only) adds accounts with one of three roles:
-  - **Admin**: everything, including managing users.
+- **First run:** the hub prints a one-time **setup code** in its log
+  (`*** First run: ... setup code XXXXX-XXXXX`; with Docker,
+  `docker compose logs printer-hub`). Open the hub, enter the code, and create
+  the admin account. After that, the code is gone.
+- **Settings → Users** (admins only) adds accounts with one of three roles:
+  - **Admin**: everything, including printers and users.
   - **Operator**: print, control printers, manage files, rolls and the job log.
   - **Viewer**: watch status, cameras and logs. Every change is refused.
 - **Account** (your name, top right): change your password, see the devices
@@ -119,8 +195,8 @@ user. Only the sign-in page and `/api/health` are open.
 - Changing or resetting a password signs that user out everywhere else.
   Deleting a user ends their sessions and live view at once.
 - Eight wrong passwords lock that username and that address out for 15 minutes.
-- **Forgot the admin password:** set `HUB_RESET_PASSWORD=<username>` in the
-  stack env and redeploy. The log shows a new random password. Sign in, change
+- **Forgot the admin password:** set the environment variable
+  `HUB_RESET_PASSWORD=<username>` on the hub container and restart it. The log shows a new random password. Sign in, change
   it, then remove the variable.
 
 Passwords are stored as scrypt hashes and sessions as SHA-256 hashes of their
@@ -130,48 +206,31 @@ behind an HTTPS reverse proxy, the cookie gets the Secure flag from
 `X-Forwarded-Proto`. Set `"trustProxy": true` in the config so failed
 sign-ins are counted per real client address.
 
-## Configure `config.json`
+## Advanced: the config file
+
+Most setups need nothing here. The hub reads `config.json` (or the file named
+by `CONFIG_PATH`; the Docker image uses `config.docker.json`):
 
 ```json
-{
-  "port": 3000,
-  "pollIntervalMs": 3000,
-  "printers": [
-    { "id": "ad5m", "name": "Adventurer 5M", "type": "flashforge",
-      "host": "192.168.1.50", "serialNumber": "SNMOMC9900001", "checkCode": "a1b2c3d4" },
-    { "id": "kobrax", "name": "Kobra X", "type": "anycubic", "host": "192.168.1.51" }
-  ]
-}
+{ "port": 3000, "pollIntervalMs": 3000, "trustProxy": false, "printers": [] }
 ```
 
-Give both printers a DHCP reservation in your router so the IPs don't change.
+- `pollIntervalMs`: how often printers are asked for their status.
+- `trustProxy`: set to `true` behind a reverse proxy (see above).
+- `printers`: printers listed here are imported into Settings on the very
+  first start (then `data/printers.json` takes over). Values like
+  `"${NAME}"` are read from environment variables. Each entry has `id`,
+  `name`, `type` (`moonraker`, `octoprint`, `prusalink`, `flashforge`,
+  `anycubic`, `mock`) and that type's settings, e.g.
+  `{ "id": "voron", "name": "Voron", "type": "moonraker", "host": "192.168.1.60" }`.
 
-### FlashForge AD5M
+Environment variables: `PORT`, `DATA_DIR`, `SLICER_URL`, `CONFIG_PATH`,
+`TZ`, `HUB_RESET_PASSWORD`.
 
-- On the printer's touchscreen, turn on **LAN-only mode** in the network
-  settings. The screen then shows a **check code**. The serial number is under
-  the About / device info screen.
-- With `serialNumber` + `checkCode` you get everything: full status, light
-  control, file list, and starting prints.
-- Without them, the hub uses the older TCP API: status, progress, temps, and
-  pause/resume/cancel still work. Light and file list don't. That port only
-  allows one client at a time, so it can clash with FlashPrint or Orca.
-- Camera: `http://<ip>:8080/?action=stream` (standard on the 5M Pro; an add-on
-  for the 5M). Override with `"cameraUrl": "..."`, or turn it off with
-  `"cameraUrl": false`.
-- Optional: `"levelBeforePrint": true` runs auto-leveling before prints you start from the hub.
-
-### Anycubic Kobra X
-
-- Turn on **LAN Mode** on the printer (Settings → Network). In cloud mode the
-  hub reports "Printer is in cloud mode".
-- No credentials to enter. The hub gets them from the printer during the
-  handshake and does a fresh handshake each time it reconnects.
-- The Kobra X only has WiFi. If you want it fully local, you can block its
-  internet access in your router once LAN Mode is on.
-- Camera: the printer serves an FLV stream on `:18088/flv`. The hub sends it
-  a start-camera command and plays the stream with mpegts.js. If the stream
-  fails, it falls back to still snapshots.
+**Which version is running:** the top bar shows it under the name (e.g.
+`v0.11 · Nov 1, 2026`), from `version` and `released` in `package.json`.
+Hover it for the slicer's OrcaSlicer version and whether it can slice STEP
+files.
 
 ## Control panel
 
@@ -248,11 +307,14 @@ printer must be idle to receive files.
   `.3mf` project. A `.3mf` that already contains sliced plates goes to Print
   files instead. STL, OBJ and 3MF models get a 3D **Preview** with dimensions.
 - **Slice…** runs [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)
-  (2.4.2 by default) in the `slicer` container, using Orca's own 0.4 mm presets:
-  - AD5M: `Flashforge Adventurer 5M 0.4 Nozzle`, with 0.12 Fine, 0.20 Standard or
-    0.24 Draft quality and all Flashforge AD5M filaments.
-  - Kobra X: `Anycubic Kobra X 0.4 nozzle`, with 0.08–0.28 mm quality and the
-    Anycubic Kobra X filaments.
+  (2.4.2 by default) in the `slicer` container, with the printer's profile from
+  Settings (FlashForge and Anycubic printers have one preset):
+  - Quality and filament lists are Orca's presets for that printer. Brands
+    without their own filaments (Voron, Custom, …) get Orca's generic filament
+    library.
+  - The build plate defaults to the printer's own, or else the plate the
+    filament has temperatures for (e.g. smooth PEI on Prusa), so beds heat
+    properly.
   - STEP files are meshed to STL first with OpenCASCADE (`slicer/step2stl.cpp`,
     same tolerances as Orca's desktop app), since Orca's CLI can't read STEP.
 
@@ -302,8 +364,14 @@ are saved in `data/jobs.json`.
   browser over Server-Sent Events (`/api/events`).
 - Camera and thumbnail traffic goes through the server
   (`/api/printers/:id/camera`), so the browser only ever talks to port 3000.
-- Drivers live in `drivers/`, one file per printer brand. To add a brand,
-  extend `PrinterDriver` in `drivers/base.js`.
+- Printers are stored in `data/printers.json` and edited in Settings; each
+  runs a driver from `drivers/`, one file per printer type.
+- **Adding a printer type:** extend `PrinterDriver` (`drivers/base.js`), give
+  the class a `static meta` (label, help and the setup form's fields), and add
+  it to `DRIVERS` in `server.js`. The Settings form, secret handling and
+  connection test then work without other changes. `drivers/moonraker.js` is a
+  compact example, and `test/fake-printers.js` shows how to test against a
+  fake API.
 
 API (needs a session cookie from `POST /api/auth/login`): `GET /api/printers`, `GET /api/printers/:id/files`,
 `POST /api/printers/:id/{pause|resume|cancel}`,
@@ -314,10 +382,17 @@ port-forward it to the internet.
 
 ## Contributing
 
-Issues and pull requests are welcome. `npm run demo` gives you a full UI with
-simulated printers. Changes to `slicer/` are checked by the
-[slicer-build](.github/workflows/slicer-build.yml) workflow, which builds the
-image, runs its self-test and slices a real STEP file.
+Issues and pull requests are welcome, especially reports from printers the
+hub hasn't been tried on yet. `npm run demo` gives you a full UI with
+simulated printers, and `node test/fake-printers.js` starts fake Klipper,
+OctoPrint and PrusaLink printers you can add in Settings. `npm test` runs the
+driver and API tests, which also run on every push. Changes to `slicer/` are
+checked by the [slicer-build](.github/workflows/slicer-build.yml) workflow,
+which builds the image, runs its self-test and slices a real STEP file.
+
+Releases: bump `version` and `released` in `package.json`, then push a tag
+like `v0.11.0`. The [release](.github/workflows/release.yml) workflow tests,
+builds and publishes both images to GitHub Container Registry.
 
 To report a security problem, see [SECURITY.md](SECURITY.md).
 

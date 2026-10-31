@@ -139,7 +139,7 @@ async function slice(req) {
       if (req.options && key in req.options) Object.assign(processCfg, fn(req.options[key]));
     }
     // Without an explicit plate the CLI uses Cool Plate and its (low) bed temps.
-    const bedType = BED_TYPES.some((b) => b.value === req.bedType) ? req.bedType : store.defaultBedType(vendor, machine);
+    const bedType = BED_TYPES.some((b) => b.value === req.bedType) ? req.bedType : store.defaultBedType(vendor, machine, req.filament);
     processCfg.curr_bed_type = bedType;
     machineCfg.curr_bed_type = bedType;
     const write = (name, cfg) => { const p = path.join(dir, name); fs.writeFileSync(p, JSON.stringify(cfg)); return p; };
@@ -195,21 +195,25 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
     if (url.pathname === '/health') return json(res, 200, { ok: true, version, busy, step: fs.existsSync(STEP2STL_BIN) });
+    if (url.pathname === '/machines') return json(res, 200, store.machines());
     if (url.pathname === '/profiles') {
       const vendor = url.searchParams.get('vendor');
       const machine = url.searchParams.get('machine');
       store.resolve(vendor, 'machine', machine); // throws if unknown
       const processes = store.compatible(vendor, 'process', machine);
       const filaments = store.compatible(vendor, 'filament', machine);
+      const filament = filaments.find((n) => /^Generic PLA\b/.test(n))
+        || filaments.find((n) => /\bPLA\b/.test(n) && !/silk|matte|glow|high speed|hs|\+|cf|galaxy|metal|sparkle|luminous|color change/i.test(n))
+        || filaments[0] || null;
       return json(res, 200, {
         machine,
         processes,
         filaments,
         bedTypes: BED_TYPES,
         defaults: {
-          bedType: store.defaultBedType(vendor, machine),
+          bedType: store.defaultBedType(vendor, machine, filament),
           process: processes.find((n) => /^0\.20mm Standard/.test(n)) || processes[0] || null,
-          filament: filaments.find((n) => /\bPLA\b/.test(n) && !/silk|matte|glow|high speed|hs|\+|cf|galaxy|metal|sparkle|luminous|color change/i.test(n)) || filaments[0] || null,
+          filament,
         },
       });
     }

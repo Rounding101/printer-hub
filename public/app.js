@@ -205,7 +205,40 @@ function render(state) {
   if (card.statusKey !== key) { card.statusKey = key; Files.renderLibrary(); }
 }
 
+// The full printer list after one was added, changed or removed in Settings.
+function setPrinters(list) {
+  const ids = new Set(list.map((p) => p.id));
+  for (const [id, card] of cards) {
+    if (ids.has(id)) continue;
+    card.player?.destroy();
+    card.el.querySelectorAll('.cam img, .cam video').forEach(stopMedia);
+    card.el.remove();
+    cards.delete(id);
+    if (Control.printerId === id && location.hash.startsWith('#control')) location.hash = '#printers';
+  }
+  list.forEach(render);
+  updateSummary();
+  if (!document.querySelector('.view[data-view~="settings"]').hidden) Setup.render();
+}
+
+// What the dashboard says when there are no printers yet.
+function updateEmpty() {
+  let empty = document.getElementById('grid-empty');
+  if (cards.size) { empty?.remove(); return; }
+  if (!empty) {
+    empty = document.createElement('div');
+    empty.id = 'grid-empty';
+    empty.className = 'grid-empty';
+    grid.append(empty);
+  }
+  const admin = document.body.dataset.role === 'admin';
+  empty.innerHTML = admin
+    ? '<h2>Connect your first printer</h2><p>Printer Hub works with Klipper (Moonraker), OctoPrint, Prusa (PrusaLink), FlashForge Adventurer 5M and Anycubic Kobra X printers on your network.</p><a class="btn primary" href="#settings/add">Add a printer</a>'
+    : '<h2>No printers yet</h2><p>An admin needs to add printers in Settings.</p>';
+}
+
 function updateSummary() {
+  updateEmpty();
   const all = [...cards.values()].map((c) => c.state);
   const printing = all.filter((p) => ['preparing', 'printing', 'heating', 'pausing'].includes(p.status)).length;
   const paused = all.filter((p) => p.status === 'paused').length;
@@ -230,7 +263,7 @@ function confirmCancel(card, go) {
 
 function showView() {
   const [view, arg] = (location.hash.slice(1) || 'printers').split('/');
-  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'account', 'users'].includes(view) ? view : 'printers';
+  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'account', 'settings', 'users'].includes(view) ? view : 'printers';
   if (known === 'control') {
     // Printers arrive over SSE; open once the card exists.
     const id = decodeURIComponent(arg || '');
@@ -238,12 +271,17 @@ function showView() {
   } else {
     Control.close();
   }
-  document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === (known === 'control' ? 'printers' : known) ? 'page' : 'false'));
+  const navFor = { control: 'printers', users: 'settings' }[known] || known;
+  document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === navFor ? 'page' : 'false'));
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
   document.querySelectorAll('[data-sub]').forEach((el) => { el.hidden = el.dataset.sub !== known; });
   if (known === 'jobs' || known === 'totals') Jobs.render();
   if (known === 'account') Account.renderAccount();
   if (known === 'users') Account.renderUsers();
+  if (known === 'settings') {
+    Setup.render();
+    if (arg === 'add') { history.replaceState(null, '', '#settings'); Setup.open(); }
+  }
   document.getElementById('me').setAttribute('aria-current', known === 'account' ? 'page' : 'false');
 }
 let pendingControl = null;
@@ -254,7 +292,8 @@ window.addEventListener('hashchange', showView);
 function connect() {
   const conn = document.getElementById('conn');
   const es = new EventSource('/api/events');
-  es.addEventListener('snapshot', (e) => { conn.classList.add('live'); JSON.parse(e.data).forEach(render); });
+  es.addEventListener('snapshot', (e) => { conn.classList.add('live'); setPrinters(JSON.parse(e.data)); });
+  es.addEventListener('printers', (e) => setPrinters(JSON.parse(e.data)));
   es.addEventListener('printer', (e) => render(JSON.parse(e.data)));
   es.addEventListener('jobs', (e) => Jobs.setAll(JSON.parse(e.data)));
   es.addEventListener('job', (e) => Jobs.upsert(JSON.parse(e.data)));

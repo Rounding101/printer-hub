@@ -475,3 +475,34 @@ input[type="color"] { padding: 2px; height: 36px; width: 100%; cursor: pointer; 
   .stats { grid-template-columns: repeat(2, 1fr); }
   .temps { gap: 16px; flex-wrap: wrap; }
 }
+
+/* ---- Settings: printers ---- */
+.settings-tabs { align-self: flex-start; }
+.seg a {
+  font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none;
+  padding: 6px 12px; border-radius: 7px;
+}
+.seg a[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.ps-list { list-style: none; margin: 0; padding: 0; }
+.ps-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+.ps-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ps-where, .ps-error { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-error { color: var(--danger); }
+.ps-empty { margin: 0; color: var(--muted); }
+dialog.wide { width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+.ps-field { display: flex; flex-direction: column; gap: 4px; }
+.ps-field .dlg-hint { font-size: 13px; }
+.ps-slicer { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ps-slicer legend { padding: 0 6px; font-size: 13px; font-weight: 650; color: var(--muted); }
+.ps-advanced summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+.ps-advanced[open] { display: flex; flex-direction: column; gap: 8px; }
+.ps-result { margin: 0; font-size: 14px; padding: 8px 12px; border-radius: 8px; }
+.ps-result.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.ps-result.bad { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.grid-empty { grid-column: 1 / -1; text-align: center; padding: 72px 16px; color: var(--muted); }
+.grid-empty h2 { margin: 0 0 8px; color: var(--text); font-size: 20px; }
+.grid-empty p { margin: 0 auto 20px; max-width: 520px; }
+@media (max-width: 600px) {
+  .ps-slicer .form-row { grid-template-columns: 1fr; }
+  .dlg-actions { flex-wrap: wrap; }
+}

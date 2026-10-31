@@ -5,7 +5,7 @@
 // Fallback (no check code configured): the legacy G-code-over-TCP API on port
 // 8899, which needs no credentials but reports less detail.
 const net = require('node:net');
-const { PrinterDriver } = require('./base');
+const { PrinterDriver, HOST_FIELD, CAMERA_FIELD } = require('./base');
 const { postMultipart } = require('../lib/multipart');
 
 const HTTP_PORT = 8898;
@@ -33,6 +33,19 @@ const TCP_STATUS = {
 };
 
 class FlashForgeDriver extends PrinterDriver {
+  static meta = {
+    label: 'FlashForge Adventurer 5M / 5M Pro',
+    help: 'Stock firmware with LAN-only mode on. Without the serial and check code you still get status and pause/resume/cancel.',
+    slicer: { vendor: 'Flashforge', machine: 'Flashforge Adventurer 5M 0.4 Nozzle' },
+    fields: [
+      { ...HOST_FIELD, help: 'The printer’s IP address.' },
+      { key: 'serialNumber', label: 'Serial number', type: 'text', help: 'On the printer under About / device info.' },
+      { key: 'checkCode', label: 'Check code', type: 'password', help: 'Shown on the printer’s screen when you turn on LAN-only mode.' },
+      { key: 'levelBeforePrint', label: 'Auto-level before prints started from the hub', type: 'checkbox' },
+      { ...CAMERA_FIELD, help: 'Defaults to the 5M Pro’s camera on port 8080.' },
+    ],
+  };
+
   constructor(cfg, opts) {
     super(cfg, opts);
     this.mode = cfg.checkCode && cfg.serialNumber ? 'http' : 'tcp';
@@ -56,12 +69,12 @@ class FlashForgeDriver extends PrinterDriver {
       } catch (err) {
         this.setOffline(err);
       }
-      this.timer = setTimeout(tick, this.pollIntervalMs);
+      if (!this.stopped) this.timer = setTimeout(tick, this.pollIntervalMs); // stop() may land mid-poll
     };
     tick();
   }
 
-  async stop() { clearTimeout(this.timer); }
+  async stop() { this.stopped = true; clearTimeout(this.timer); }
 
   // ---- HTTP API (port 8898) ----------------------------------------------
 

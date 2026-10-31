@@ -34,3 +34,17 @@ jobs:
           res=$(curl -s -X POST localhost:8080/slice -d "$(echo "$body" | jq '.input = "/data/models/broken.step"')"); echo "broken: $res"
           echo "$res" | jq -e '.error | test("^Couldn.t convert the STEP file: the file couldn.t be read$")'
           docker logs slicer | tail -5
+      - name: Any printer - profile list, shared filament library, plate choice
+        run: |
+          curl -sf localhost:8080/machines | jq -e 'length > 50 and (map(.vendor) | index("Custom") != null)'
+          cp data/models/to220.step data/models/part.step
+          for m in "Custom|MyKlipper 0.4 nozzle" "Voron|Voron 2.4 350 0.4 nozzle" "Prusa|Prusa MK4 0.4 nozzle"; do
+            v=${m%%|*}; mc=${m#*|}
+            prof=$(curl -sfG localhost:8080/profiles --data-urlencode "vendor=$v" --data-urlencode "machine=$mc")
+            echo "$prof" | jq -c '{machine, processes: (.processes|length), filaments: (.filaments|length), defaults}'
+            body=$(jq -n --arg v "$v" --arg m "$mc" --argjson p "$prof" \
+              '{input:"/data/models/part.step", vendor:$v, machine:$m, process:$p.defaults.process, filament:$p.defaults.filament}')
+            res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$mc: $res"
+            # PLA bed at a PLA temperature, not Orca's 45 °C fallback for a plate the filament doesn't cover.
+            echo "$res" | jq -e '.stats.layers > 10 and .stats.bedTemp >= 50'
+          done

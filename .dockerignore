@@ -5,3 +5,7 @@ data-*
 .env
 .git
 *.log
+test
+docs
+deploy
+.github

@@ -6,7 +6,7 @@
 // Protocol reference: https://github.com/rvanderp3/kobra-connect
 const crypto = require('node:crypto');
 const mqtt = require('mqtt');
-const { PrinterDriver } = require('./base');
+const { PrinterDriver, HOST_FIELD, CAMERA_FIELD } = require('./base');
 const { postMultipart } = require('../lib/multipart');
 const { matcherFor } = require('../lib/compat');
 
@@ -106,6 +106,13 @@ function stageLabel(raw) {
 }
 
 class AnycubicDriver extends PrinterDriver {
+  static meta = {
+    label: 'Anycubic Kobra X / Kobra 3 / S1 (LAN mode)',
+    help: 'Stock firmware with LAN Mode on (Settings → Network). No credentials needed; the hub gets them from the printer.',
+    slicer: { vendor: 'Anycubic', machine: 'Anycubic Kobra X 0.4 nozzle' },
+    fields: [{ ...HOST_FIELD, help: 'The printer’s IP address.' }, CAMERA_FIELD],
+  };
+
   constructor(cfg, opts) {
     super(cfg, opts);
     this.state.capabilities = { pause: true, resume: true, cancel: true, light: true, files: true };

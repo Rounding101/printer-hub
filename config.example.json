@@ -1,20 +1,5 @@
 {
   "port": 3000,
   "pollIntervalMs": 3000,
-  "printers": [
-    {
-      "id": "ad5m",
-      "name": "Adventurer 5M",
-      "type": "flashforge",
-      "host": "192.168.1.50",
-      "serialNumber": "",
-      "checkCode": ""
-    },
-    {
-      "id": "kobrax",
-      "name": "Kobra X",
-      "type": "anycubic",
-      "host": "192.168.1.51"
-    }
-  ]
+  "printers": []
 }

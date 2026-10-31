@@ -21,7 +21,7 @@
       <a href="#library" data-view="library">Library</a>
       <a href="#jobs" data-view="jobs">Job log</a>
       <a href="#totals" data-view="totals">Totals</a>
-      <a href="#users" data-view="users" id="nav-users" hidden>Users</a>
+      <a href="#settings" data-view="settings" id="nav-settings" hidden>Settings</a>
     </nav>
     <p id="summary" class="summary">Connecting…</p>
     <span id="conn" class="conn" title="Live connection to server"></span>
@@ -390,8 +390,29 @@
     </section>
   </section>
 
+  <section class="view page narrow" data-view="settings" hidden>
+    <h2 class="page-h">Settings</h2>
+    <nav class="seg settings-tabs" aria-label="Settings sections">
+      <a href="#settings" aria-current="page">Printers</a>
+      <a href="#users">Users</a>
+    </nav>
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Printers</h3>
+        <button class="btn primary" type="button" id="ps-add">Add printer</button>
+      </div>
+      <p class="dlg-hint">Klipper (Moonraker), OctoPrint, Prusa (PrusaLink), FlashForge Adventurer 5M and Anycubic Kobra X printers connect over your network. Job history stays when you remove a printer.</p>
+      <ul class="ps-list" id="ps-list"></ul>
+      <p class="ps-empty" id="ps-empty" hidden>No printers yet. <strong>Add printer</strong> to connect your first one.</p>
+    </section>
+  </section>
+
   <section class="view page narrow" data-view="users" hidden>
-    <h2 class="page-h">Users</h2>
+    <h2 class="page-h">Settings</h2>
+    <nav class="seg settings-tabs" aria-label="Settings sections">
+      <a href="#settings">Printers</a>
+      <a href="#users" aria-current="page">Users</a>
+    </nav>
     <section class="panel">
       <div class="panel-head"><h3>Add a user</h3></div>
       <form class="form" id="user-form">
@@ -418,6 +439,37 @@
       </table>
     </div>
   </section>
+
+  <dialog id="ps-dlg" class="wide">
+    <form class="dlg form" id="ps-form" novalidate>
+      <h3 class="ps-title">Add a printer</h3>
+      <label>Type <select name="type" id="ps-type" required></select></label>
+      <p class="dlg-hint" id="ps-type-help"></p>
+      <label>Name <input name="name" maxlength="40" required placeholder="e.g. Voron 2.4"></label>
+      <div class="form" id="ps-fields"></div>
+      <fieldset class="ps-slicer">
+        <legend>Slice with</legend>
+        <div class="form-row">
+          <label>Brand <select id="ps-vendor"><option value="">Don’t slice for this printer</option></select></label>
+          <label>OrcaSlicer printer <select id="ps-machine" disabled></select></label>
+        </div>
+        <p class="dlg-hint" id="ps-slicer-hint">The OrcaSlicer profile used when you slice models for this printer.</p>
+      </fieldset>
+      <details class="ps-advanced">
+        <summary>Advanced</summary>
+        <label>Sliced-file check <input name="modelMatch" placeholder="e.g. voron|v2.4" spellcheck="false"></label>
+        <p class="dlg-hint">A pattern matched against the printer name in a G-code file’s header. Files that don’t match are refused, so a file sliced for another printer can’t be started here. Leave empty to skip the check.</p>
+      </details>
+      <p class="ps-result" id="ps-result" role="status" hidden></p>
+      <div class="dlg-actions">
+        <button class="btn ghost danger" type="button" id="ps-delete" hidden>Remove</button>
+        <span class="grow"></span>
+        <button class="btn" type="button" id="ps-test">Test connection</button>
+        <button class="btn ghost" type="button" id="ps-cancel">Cancel</button>
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="reset-dlg">
     <form method="dialog" class="dlg form">
@@ -489,6 +541,7 @@
   <script src="/files.js"></script>
   <script src="/control.js"></script>
   <script src="/account.js"></script>
+  <script src="/setup.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -56,7 +56,9 @@ class ProfileStore {
   // The plate type the GUI would pick: the printer model's default_bed_type.
   // The CLI otherwise defaults to Cool Plate, whose filament bed temps are low
   // (e.g. 35 °C for Anycubic PLA), so beds barely heat.
-  defaultBedType(vendor, machineName) {
+  // Printers that name no default (e.g. Prusa) get the plate the filament has
+  // temperatures for, so Orca doesn't fall back to its built-in 45 °C.
+  defaultBedType(vendor, machineName, filamentName) {
     const machine = this.resolve(vendor, 'machine', machineName);
     const modelName = machine.printer_model;
     const dir = path.join(this.dir, vendor, 'machine');
@@ -68,17 +70,52 @@ class ProfileStore {
         } catch { /* skip */ }
       }
     }
-    return machine.default_bed_type || 'Textured PEI Plate';
+    if (machine.default_bed_type) return machine.default_bed_type;
+    let fil = {};
+    try { if (filamentName) fil = this.resolve(vendor, 'filament', filamentName); } catch { /* unknown filament */ }
+    const has = (key) => Number([].concat(fil[key] ?? [])[0]) > 0;
+    if (!has('textured_plate_temp') && has('hot_plate_temp')) return 'High Temp Plate';
+    return 'Textured PEI Plate';
+  }
+
+  // Every printer preset a user can pick, grouped by vendor:
+  // [{ vendor, machines: [name, ...] }]. Read once, it's ~1000 files.
+  machines() {
+    if (this.machineList) return this.machineList;
+    const out = [];
+    for (const vendor of fs.readdirSync(this.dir)) {
+      const dir = path.join(this.dir, vendor, 'machine');
+      if (vendor === 'OrcaFilamentLibrary' || !fs.existsSync(dir)) continue;
+      const names = [];
+      for (const f of walk(dir)) {
+        try {
+          const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+          if (j.type === 'machine' && j.instantiation === 'true' && j.name) names.push(j.name);
+        } catch { /* skip unreadable */ }
+      }
+      if (names.length) out.push({ vendor, machines: names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) });
+    }
+    this.machineList = out.sort((a, b) => a.vendor.localeCompare(b.vendor));
+    return this.machineList;
   }
 
   // Presets that list `machineName` in compatible_printers (or inherit a list that does).
   compatible(vendor, kind, machineName) {
+    const own = this.matching(vendor, kind, machineName, false);
+    if (own.length || kind !== 'filament') return own;
+    // Vendors without filaments of their own (Voron, Custom, ...) use Orca's
+    // shared library, whose presets have no printer list: they fit any printer.
+    return this.matching('OrcaFilamentLibrary', kind, machineName, true);
+  }
+
+  matching(vendor, kind, machineName, unlistedFitsAll) {
     const out = [];
     for (const [name, json] of this.vendor(vendor)[kind]) {
       if (json.instantiation !== 'true') continue;
       let compat;
       try { compat = this.resolve(vendor, kind, name).compatible_printers; } catch { continue; }
-      if (Array.isArray(compat) && compat.includes(machineName)) out.push(name);
+      const listed = Array.isArray(compat) && compat.length > 0;
+      if (listed ? compat.includes(machineName) : unlistedFitsAll) out.push(name);
     }
     return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }

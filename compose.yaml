@@ -1,3 +1,5 @@
+# Builds both images from this repository. To run published images instead
+# (no build), use deploy/docker-compose.yml.
 services:
   printer-hub:
     build: .
@@ -8,12 +10,14 @@ services:
     ports:
       - "${HUB_PORT:-3000}:3000"
     environment:
-      AD5M_HOST: ${AD5M_HOST:?set AD5M_HOST}
-      AD5M_SERIAL: ${AD5M_SERIAL:-}
-      AD5M_CHECK_CODE: ${AD5M_CHECK_CODE:-}
-      KOBRAX_HOST: ${KOBRAX_HOST:?set KOBRAX_HOST}
       SLICER_URL: http://slicer:8080
       TZ: ${TZ:-UTC}
+      # Printers are set up in the hub (Settings → Printers). These are only read
+      # once, to import printers from installs before v0.11; leave them unset.
+      AD5M_HOST: ${AD5M_HOST:-}
+      AD5M_SERIAL: ${AD5M_SERIAL:-}
+      AD5M_CHECK_CODE: ${AD5M_CHECK_CODE:-}
+      KOBRAX_HOST: ${KOBRAX_HOST:-}
     volumes:
       - printer-hub-data:/data
 

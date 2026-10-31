@@ -5,6 +5,10 @@ const https = require('node:https');
 const { FlashForgeDriver } = require('./drivers/flashforge');
 const { AnycubicDriver } = require('./drivers/anycubic');
 const { MockDriver } = require('./drivers/mock');
+const { MoonrakerDriver } = require('./drivers/moonraker');
+const { OctoPrintDriver } = require('./drivers/octoprint');
+const { PrusaLinkDriver } = require('./drivers/prusalink');
+const { PrinterStore } = require('./lib/printers');
 const { JobLog } = require('./lib/jobs');
 const { Library } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
@@ -12,7 +16,15 @@ const { SpoolStore } = require('./lib/spools');
 const { AuthStore, allowed } = require('./lib/auth');
 const { version: HUB_VERSION, released: HUB_RELEASED } = require('./package.json');
 
-const DRIVERS = { flashforge: FlashForgeDriver, anycubic: AnycubicDriver, mock: MockDriver };
+// Printer types offered in Settings → Printers, in that order.
+const DRIVERS = {
+  moonraker: MoonrakerDriver,
+  octoprint: OctoPrintDriver,
+  prusalink: PrusaLinkDriver,
+  flashforge: FlashForgeDriver,
+  anycubic: AnycubicDriver,
+  mock: MockDriver,
+};
 
 // ---- Config ------------------------------------------------------------------
 
@@ -20,25 +32,17 @@ const argIdx = process.argv.indexOf('--config');
 const configPath = path.resolve(__dirname, argIdx > -1 ? process.argv[argIdx + 1] : process.env.CONFIG_PATH || 'config.json');
 if (!fs.existsSync(configPath)) {
   fs.copyFileSync(path.join(__dirname, 'config.example.json'), configPath);
-  console.log(`Created ${path.basename(configPath)} from the example — edit it with your printer IPs.`);
+  console.log(`Created ${path.basename(configPath)} from the example.`);
 }
-// "${NAME}" in config values is replaced by the NAME environment variable, so
-// secrets like check codes can come from the environment (e.g. Docker).
+// "${NAME}" in config values is replaced by the NAME environment variable
+// (empty when unset), so values can come from the environment (e.g. Docker).
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'), (_key, value) => {
   if (typeof value !== 'string') return value;
   return value.replace(/\$\{(\w+)\}/g, (_m, name) => {
-    if (process.env[name] == null) console.warn(`Config references unset environment variable ${name}`);
     return process.env[name] ?? '';
   });
 });
 const port = Number(process.env.PORT) || config.port || 3000;
-
-const printers = new Map();
-for (const cfg of config.printers || []) {
-  const Driver = DRIVERS[cfg.type];
-  if (!Driver) { console.warn(`Skipping ${cfg.id}: unknown type "${cfg.type}"`); continue; }
-  printers.set(cfg.id, new Driver(cfg, { pollIntervalMs: config.pollIntervalMs }));
-}
 
 // Job log lives next to the config, e.g. data/ for config.json, data-demo/ for the demo.
 const dataDir = process.env.DATA_DIR || config.dataDir
@@ -48,6 +52,8 @@ const jobs = new JobLog(dataDir);
 const library = new Library(dataDir);
 const spools = new SpoolStore(dataDir, jobs);
 const auth = new AuthStore(dataDir);
+const printerStore = new PrinterStore(dataDir, DRIVERS, config.printers || []);
+const printers = new Map(); // id -> running driver
 
 // ---- Live updates (Server-Sent Events) ---------------------------------------
 
@@ -70,17 +76,66 @@ function parseDuration(text) {
   return total || null;
 }
 
-for (const driver of printers.values()) {
-  driver.on('update', (state) => {
-    // Before the printer reports a remaining time (e.g. while preparing), use
-    // the slicer's estimate from the library copy of the file.
-    if (state.job?.file && !state.job.remaining && state.job.estimate === undefined) {
-      state.job.estimate = parseDuration(library.findByName(state.job.file)?.estimate);
-    }
-    jobs.observe(state);
-    broadcast('printer', state);
-  });
+function onPrinterUpdate(state) {
+  // Before the printer reports a remaining time (e.g. while preparing), use
+  // the slicer's estimate from the library copy of the file.
+  if (state.job?.file && !state.job.remaining && state.job.estimate === undefined) {
+    state.job.estimate = parseDuration(library.findByName(state.job.file)?.estimate);
+  }
+  jobs.observe(state);
+  broadcast('printer', state);
 }
+
+// Drivers start once the server is listening; printers added later start at once.
+let started = false;
+function attach(cfg) {
+  const Driver = DRIVERS[cfg.type];
+  if (!Driver) { console.warn(`Skipping ${cfg.id}: unknown type "${cfg.type}"`); return; }
+  let driver;
+  try { driver = new Driver(cfg, { pollIntervalMs: config.pollIntervalMs }); } catch (err) { console.warn(`Skipping ${cfg.id}: ${err.message}`); return; }
+  driver.on('update', onPrinterUpdate);
+  printers.set(cfg.id, driver);
+  if (started) driver.start();
+}
+async function detach(id) {
+  const driver = printers.get(id);
+  if (!driver) return;
+  printers.delete(id);
+  driver.removeAllListeners('update');
+  await driver.stop().catch(() => {});
+}
+// Connects with a config from the setup form (saved or not) for up to 10 s
+// and reports what the printer said.
+async function testPrinter(cfg) {
+  let driver;
+  try {
+    driver = new DRIVERS[cfg.type]({ ...cfg, id: cfg.id || 'setup-test' }, { pollIntervalMs: 2000 });
+    const state = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(driver.state), 10000);
+      driver.on('update', (s) => { if (s.online || s.error) { clearTimeout(timer); resolve(s); } });
+      Promise.resolve(driver.start()).catch((err) => { clearTimeout(timer); resolve({ online: false, error: err.message }); });
+    });
+    return {
+      ok: !!state.online,
+      status: state.status || null,
+      model: state.model || null,
+      firmware: state.firmware || null,
+      error: state.online ? null : state.error || 'No answer from the printer within 10 seconds',
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  } finally {
+    driver?.removeAllListeners('update');
+    await driver?.stop().catch(() => {});
+  }
+}
+
+for (const cfg of printerStore.all()) attach(cfg);
+printerStore.on('change', async ({ added, updated, removed }) => {
+  if (removed || updated) await detach(removed || updated.id);
+  if (added || updated) attach(added || updated);
+  broadcast('printers', snapshot());
+});
 jobs.on('job', (job) => {
   broadcast('job', job);
   // Plan when a job opens; try once more when it ends if no weight was known yet.
@@ -148,12 +203,9 @@ jobs.quantityHint = (file) => library.findByName(file)?.copies ?? null;
 // ---- Slicer service (OrcaSlicer CLI in its own container) ---------------------
 
 const SLICER_URL = process.env.SLICER_URL || config.slicerUrl || null;
-// Orca vendor/machine presets per printer type; a printer can override with "slicer".
-const SLICER_DEFAULTS = {
-  anycubic: { vendor: 'Anycubic', machine: 'Anycubic Kobra X 0.4 nozzle' },
-  flashforge: { vendor: 'Flashforge', machine: 'Flashforge Adventurer 5M 0.4 Nozzle' },
-};
-const slicerProfileFor = (p) => p.cfg.slicer || SLICER_DEFAULTS[p.cfg.type] || null;
+// The Orca machine preset a printer slices with: its own choice in Settings,
+// else its type's default (FlashForge and Anycubic have one).
+const slicerProfileFor = (p) => p.cfg.slicer || DRIVERS[p.cfg.type]?.meta?.slicer || null;
 
 async function slicerCall(pathname, body, timeoutMs = 10000) {
   if (!SLICER_URL) throw new Error('No slicer service configured');
@@ -169,6 +221,7 @@ async function slicerCall(pathname, body, timeoutMs = 10000) {
 }
 
 let slicerStatus = { available: false, checkedAt: 0 };
+let machineList = null; // cached /machines from the slicer
 async function slicerHealth() {
   if (!SLICER_URL) return { available: false };
   if (Date.now() - slicerStatus.checkedAt < 30000) return slicerStatus;
@@ -350,6 +403,7 @@ const STATIC = {
   '/preview.js': ['public/preview.js', 'text/javascript; charset=utf-8'],
   '/control.js': ['public/control.js', 'text/javascript; charset=utf-8'],
   '/account.js': ['public/account.js', 'text/javascript; charset=utf-8'],
+  '/setup.js': ['public/setup.js', 'text/javascript; charset=utf-8'],
   '/login': ['public/login.html', 'text/html; charset=utf-8'],
   '/login.js': ['public/login.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
@@ -453,6 +507,32 @@ const server = http.createServer(async (req, res) => {
       }
       if (parts[2] && req.method === 'PATCH') return json(res, 200, jobs.edit(parts[2], await readBody(req)));
       if (parts[2] && req.method === 'DELETE') { jobs.remove(parts[2]); return json(res, 200, { ok: true }); }
+      return json(res, 404, { error: 'Not found' });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
+  // /api/printer-setup[/:id], /types, /test — Settings → Printers (admins only)
+  if (parts[1] === 'printer-setup') {
+    try {
+      if (parts[2] === 'types' && req.method === 'GET') {
+        return json(res, 200, Object.entries(DRIVERS).map(([type, D]) => ({ type, ...D.meta })));
+      }
+      if (parts[2] === 'machines' && req.method === 'GET') {
+        // OrcaSlicer's printer presets by vendor, for the "Slice with" picker.
+        if (!machineList) machineList = await slicerCall('/machines', null, 20000);
+        return json(res, 200, machineList);
+      }
+      if (parts[2] === 'test' && req.method === 'POST') {
+        const body = await readBody(req);
+        const prev = body.id ? printerStore.get(body.id) : null;
+        return json(res, 200, await testPrinter(printerStore.clean(body, prev && prev.type === body.type ? prev : null)));
+      }
+      if (!parts[2] && req.method === 'GET') return json(res, 200, printerStore.list());
+      if (!parts[2] && req.method === 'POST') return json(res, 200, printerStore.view(printerStore.add(await readBody(req))));
+      if (parts[2] && req.method === 'PATCH') return json(res, 200, printerStore.view(printerStore.update(parts[2], await readBody(req))));
+      if (parts[2] && req.method === 'DELETE') { printerStore.remove(parts[2]); return json(res, 200, { ok: true }); }
       return json(res, 404, { error: 'Not found' });
     } catch (err) {
       return json(res, 400, { error: err.message });
@@ -593,6 +673,8 @@ server.listen(port, async () => {
   if (auth.needsSetup()) console.log(`
 *** First run: open the hub and create the admin account with setup code ${auth.issueSetupCode()}
 `);
+  started = true;
+  if (!printers.size) console.log('No printers yet: add them in the hub under Settings → Printers.');
   for (const p of printers.values()) {
     console.log(`  - ${p.state.name} (${p.cfg.type}${p.cfg.host ? ' @ ' + p.cfg.host : ''})`);
     p.start();

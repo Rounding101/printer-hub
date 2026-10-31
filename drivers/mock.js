@@ -4,6 +4,15 @@ const { PrinterDriver } = require('./base');
 const FILES = ['benchy.gcode', 'calibration_cube.gcode', 'phone_stand.3mf', 'cable_clip_x8.gcode'];
 
 class MockDriver extends PrinterDriver {
+  static meta = {
+    label: 'Simulator',
+    help: 'A pretend printer for trying the hub without hardware.',
+    fields: [
+      { key: 'multiColor', label: 'Multi-color unit (4 slots)', type: 'checkbox' },
+      { key: 'startPrinting', label: 'Start with a print running', type: 'checkbox' },
+    ],
+  };
+
   constructor(cfg, opts) {
     super(cfg, opts);
     this.limits = { nozzle: 300, bed: 110, jog: 100 };

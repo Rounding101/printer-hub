@@ -31,7 +31,7 @@ const Account = (() => {
     document.body.dataset.role = me.role;
     $('me').querySelector('.me-name').textContent = me.username;
     $('me').querySelector('.me-role').textContent = me.role === 'operator' ? '' : ROLE_LABEL[me.role];
-    $('nav-users').hidden = me.role !== 'admin';
+    $('nav-settings').hidden = me.role !== 'admin';
     if (data.hub) showVersion(data.hub);
     return me;
   }

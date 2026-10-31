@@ -107,4 +107,17 @@ class PrinterDriver extends EventEmitter {
   thumbSource() { return null; }
 }
 
-module.exports = { PrinterDriver };
+// "192.168.1.20", "voron.local:7125" or "http://octopi.local/" -> a base URL
+// without a trailing slash, using defaultPort when none is given.
+function baseUrl(host, defaultPort) {
+  const h = String(host || '').trim().replace(/\/+$/, '');
+  if (!h) throw new Error('No printer address set');
+  if (/^https?:\/\//i.test(h)) return h;
+  return /:\d+$/.test(h) || !defaultPort ? `http://${h}` : `http://${h}:${defaultPort}`;
+}
+
+// Fields every printer type shares in the setup form (see each driver's static meta).
+const HOST_FIELD = { key: 'host', label: 'Address', type: 'text', required: true, placeholder: '192.168.1.50' };
+const CAMERA_FIELD = { key: 'cameraUrl', label: 'Camera stream URL', type: 'text', placeholder: 'Automatic', help: 'An MJPEG stream URL. Leave empty to use the printer’s own camera if it has one.' };
+
+module.exports = { PrinterDriver, baseUrl, HOST_FIELD, CAMERA_FIELD };

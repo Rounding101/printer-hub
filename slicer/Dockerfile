@@ -4,8 +4,8 @@ FROM ubuntu:24.04 AS step2stl
 ARG OCCT_RUNTIME="libocct-data-exchange-7.6t64 libocct-modeling-algorithms-7.6t64"
 # Runtime libraries only, plus the headers unpacked from the -dev packages:
 # installing those properly drags in GL/X11/FreeImage dev packages we don't use.
-# apt fails intermittently on the build host (exit 100), so: IPv4 only, per-file
-# retries, and the whole fetch retried up to 4 times.
+# Downloads are retried (per file, and the whole fetch up to 4 times) so a
+# flaky mirror doesn't fail the deploy.
 # Ubuntu ships NCollection_AliasedArray.hxx (needed by the mesh headers) in the
 # visualization package, so all six are required.
 ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev libocct-ocaf-dev libocct-visualization-dev"

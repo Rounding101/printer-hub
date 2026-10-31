@@ -32,5 +32,20 @@ function cubeStl(size = 20) {
     if (!(r.stats.bedTemp >= 45)) throw new Error(`${t.machine}: bed only ${r.stats.bedTemp} °C on ${r.stats.bedType}`);
     console.log(`selftest ok: ${t.machine} -> ${r.stats.layers} layers, ${r.stats.grams} g, ${r.stats.time}, bed ${r.stats.bedTemp} °C (${r.stats.bedType})`);
   }
+
+  // STEP goes through the OpenCASCADE converter. The test part is 12 mm tall,
+  // so ~60 layers at 0.2 mm proves the units came through as millimetres.
+  const step = path.join(dataDir, 'selftest', 'part.step');
+  fs.copyFileSync(process.env.STEP_TEST || '/opt/step2stl/test.step', step);
+  const t = TARGETS[0];
+  const r = await slice({
+    input: step, ...t,
+    process: store.compatible(t.vendor, 'process', t.machine).find((n) => /^0\.20mm Standard/.test(n)),
+    filament: store.compatible(t.vendor, 'filament', t.machine).find((n) => /\bPLA\b/.test(n)),
+  });
+  if (!(r.stats.grams > 5) || !(r.stats.layers >= 55 && r.stats.layers <= 65)) {
+    throw new Error(`STEP part sliced wrong: ${r.stats.layers} layers, ${r.stats.grams} g`);
+  }
+  console.log(`selftest ok: STEP part -> ${r.stats.layers} layers, ${r.stats.grams} g`);
   fs.rmSync(dataDir, { recursive: true, force: true });
 })().catch((err) => { console.error('selftest FAILED:', err.message); process.exit(1); });

@@ -10,6 +10,7 @@ const { ProfileStore } = require('./profiles');
 
 const PORT = Number(process.env.PORT) || 8080;
 const ORCA_BIN = process.env.ORCA_BIN || '/opt/orca/AppRun';
+const STEP2STL_BIN = process.env.STEP2STL_BIN || '/opt/step2stl/step2stl';
 const PROFILES_DIR = process.env.PROFILES_DIR || '/opt/orca/resources/profiles';
 const DATA_DIR = path.resolve(process.env.DATA_DIR || '/data');
 const ORCA_HOME = process.env.ORCA_HOME || '/tmp/orca-home';
@@ -102,10 +103,10 @@ function injectPaintInfo(file, stats) {
   fs.writeFileSync(file, Buffer.concat([data.subarray(0, at), Buffer.from(line), data.subarray(at)]));
 }
 
-function runOrca(args, cwd) {
+function run(bin, args, cwd) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env, HOME: ORCA_HOME, XDG_CONFIG_HOME: path.join(ORCA_HOME, '.config') };
-    const child = spawn(ORCA_BIN, args, { cwd, env });
+    const child = spawn(bin, args, { cwd, env });
     let out = '';
     const keep = (c) => { out += c; if (out.length > 200000) out = out.slice(-100000); };
     child.stdout.on('data', keep);
@@ -146,6 +147,17 @@ async function slice(req) {
     const p = write('process.json', processCfg);
     const f = write('filament.json', filamentCfg);
 
+    // Orca reads STEP only in its GUI, not the CLI, so mesh it to STL first.
+    let model = input;
+    if (/\.(step|stp)$/i.test(input)) {
+      model = path.join(dir, path.basename(input).replace(/\.(step|stp)$/i, '.stl'));
+      const conv = await run(STEP2STL_BIN, [input, model], dir);
+      if (conv.code !== 0 || !fs.existsSync(model)) {
+        const why = conv.out.split('\n').map((l) => l.trim()).filter(Boolean).slice(-2).join(' · ');
+        throw new Error(`Couldn't convert the STEP file: ${why || conv.signal || `exit ${conv.code}`}`);
+      }
+    }
+
     // --repetitions is rejected by Orca 2.4.2's CLI; listing the model N times
     // and arranging gives the same result.
     const copies = Math.max(1, Math.min(64, Math.round(Number(req.copies) || 1)));
@@ -157,13 +169,14 @@ async function slice(req) {
       '--load-settings', `${m};${p}`,
       '--load-filaments', f,
       '--outputdir', dir,
-      ...Array(copies).fill(input),
+      ...Array(copies).fill(model),
     ];
     const t0 = Date.now();
-    const { code, signal, out } = await runOrca(args, dir);
+    const { code, signal, out } = await run(ORCA_BIN, args, dir);
+    if (model !== input) fs.rmSync(model, { force: true });
     const gcode = fs.readdirSync(dir).filter((n) => n.endsWith('.gcode')).sort()[0];
     if (!gcode) {
-      const reason = out.split('\n').map((l) => l.trim()).filter((l) => /error|invalid|not in range|fail|outside|collid|empty/i.test(l)).slice(-4).join(' · ');
+      const reason = out.split('\n').map((l) => l.trim()).filter((l) => /error|invalid|not in range|fail|outside|collid|empty|unknown file|can not be parsed/i.test(l)).slice(-4).join(' · ');
       throw new Error(`Slicing failed (${signal || `exit ${code}`})${reason ? `: ${reason}` : ''}`);
     }
     const file = path.join(dir, gcode);

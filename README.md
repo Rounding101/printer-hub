@@ -197,6 +197,8 @@ printer must be idle to receive files.
     0.24 Draft quality and all Flashforge AD5M filaments.
   - Kobra X: `Anycubic Kobra X 0.4 nozzle`, with 0.08–0.28 mm quality and the
     Anycubic Kobra X filaments.
+  - STEP files are meshed to STL first with OpenCASCADE (`slicer/step2stl.cpp`,
+    same tolerances as Orca's desktop app), since Orca's CLI can't read STEP.
 
   You can set copies on the plate (they're auto-arranged), infill, supports
   (off, normal or tree), walls, brim and auto-orient. The dialog remembers your

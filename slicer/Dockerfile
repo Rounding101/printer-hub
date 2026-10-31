@@ -1,3 +1,21 @@
+# Orca's CLI can't read STEP, so build a small OpenCASCADE converter. The list
+# of Ubuntu packages its libraries come from goes along to the final image.
+FROM ubuntu:24.04 AS step2stl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      g++ libocct-data-exchange-dev libocct-modeling-algorithms-dev \
+      libocct-modeling-data-dev libocct-foundation-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY step2stl.cpp /src/
+# ldd may print /lib paths; dpkg knows the files under /usr/lib.
+RUN mkdir /out && g++ -O2 -o /out/step2stl /src/step2stl.cpp -I/usr/include/opencascade \
+      -lTKSTEP -lTKXSBase -lTKSTL -lTKMesh -lTKBO -lTKPrim -lTKTopAlgo -lTKBRep \
+      -lTKG3d -lTKGeomBase -lTKMath -lTKernel \
+    && /out/step2stl --make-test /out/test.step \
+    && /out/step2stl /out/test.step /tmp/test.stl && test -s /tmp/test.stl \
+    && ldd /out/step2stl | awk '$2 == "=>" {print $3}' | sed 's#^/lib/#/usr/lib/#' \
+       | xargs -r dpkg -S 2>/dev/null | cut -d: -f1 | sort -u | grep '^libocct' > /out/packages \
+    && cat /out/packages
+
 FROM ubuntu:24.04
 
 ARG ORCA_VERSION=2.4.2
@@ -34,10 +52,17 @@ RUN curl -fsSL -o /tmp/orca.AppImage "$ORCA_URL" \
 COPY install-missing-libs.sh /tmp/
 RUN sh /tmp/install-missing-libs.sh /opt/orca && rm /tmp/install-missing-libs.sh
 
+# STEP converter plus the OpenCASCADE runtime libraries it links.
+COPY --from=step2stl /out/ /opt/step2stl/
+RUN apt-get update \
+    && xargs apt-get install -y --no-install-recommends < /opt/step2stl/packages \
+    && rm -rf /var/lib/apt/lists/* \
+    && /opt/step2stl/step2stl /opt/step2stl/test.step /tmp/test.stl && rm /tmp/test.stl
+
 WORKDIR /app
 COPY profiles.js server.js selftest.js ./
 
-# Fail the build now if Orca can't actually slice for either printer.
+# Fail the build now if Orca can't actually slice for either printer, or a STEP part.
 RUN DATA_DIR=/tmp/selftest-data ORCA_HOME=/tmp/selftest-home node selftest.js \
     && rm -rf /tmp/selftest-home
 

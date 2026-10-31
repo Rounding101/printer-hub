@@ -43,7 +43,7 @@ jobs:
             prof=$(curl -sfG localhost:8080/profiles --data-urlencode "vendor=$v" --data-urlencode "machine=$mc")
             echo "$prof" | jq -c '{machine, processes: (.processes|length), filaments: (.filaments|length), defaults}'
             body=$(jq -n --arg v "$v" --arg m "$mc" --argjson p "$prof" \
-              '{input:"/data/models/part.step", vendor:$v, machine:$m, process:$p.defaults.process, filament:$p.defaults.filament}')
+              '{input:"/data/models/part.step", vendor:$v, machine:$m, process:$p.defaults.process, filament:$p.defaults.filament, orient:true}')
             res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$mc: $res"
             # PLA bed at a PLA temperature, not Orca's 45 °C fallback for a plate the filament doesn't cover.
             echo "$res" | jq -e '.stats.layers > 10 and .stats.bedTemp >= 50'

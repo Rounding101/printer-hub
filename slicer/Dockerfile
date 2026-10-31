@@ -4,16 +4,20 @@ FROM ubuntu:24.04 AS step2stl
 ARG OCCT_RUNTIME="libocct-data-exchange-7.6t64 libocct-modeling-algorithms-7.6t64"
 # Runtime libraries only, plus the headers unpacked from the -dev packages:
 # installing those properly drags in GL/X11/FreeImage dev packages we don't use.
-# The ocaf/visualization headers aren't needed and their downloads have failed
-# on the build host, so they're best effort.
+# apt fails intermittently on the build host (exit 100), so: IPv4 only, per-file
+# retries, and the whole fetch retried up to 4 times.
 ARG OCCT_DEV="libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-foundation-dev"
-ARG OCCT_DEV_EXTRA="libocct-ocaf-dev libocct-visualization-dev"
-RUN apt-get -o Acquire::Retries=5 update \
-    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-      g++ $OCCT_RUNTIME \
-    && mkdir /tmp/debs && cd /tmp/debs && apt-get -o Acquire::Retries=5 download $OCCT_DEV \
-    && for p in $OCCT_DEV_EXTRA; do apt-get -o Acquire::Retries=5 download "$p" || echo "skipped $p"; done \
-    && for d in *.deb; do dpkg -x "$d" /occt; done \
+RUN printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "60";\n' \
+      > /etc/apt/apt.conf.d/80build-retries \
+    && for i in 1 2 3 4; do \
+         rm -rf /tmp/debs && mkdir /tmp/debs \
+         && apt-get update \
+         && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends g++ $OCCT_RUNTIME \
+         && (cd /tmp/debs && apt-get download $OCCT_DEV) \
+         && break; \
+         [ "$i" = 4 ] && exit 100; echo "apt attempt $i failed, retrying"; sleep 20; \
+       done \
+    && for d in /tmp/debs/*.deb; do dpkg -x "$d" /occt; done \
     && test -f /occt/usr/include/opencascade/STEPControl_Reader.hxx \
     && rm -rf /tmp/debs /var/lib/apt/lists/* \
     && mkdir /out && echo "$OCCT_RUNTIME" > /out/packages

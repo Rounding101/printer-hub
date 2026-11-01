@@ -96,6 +96,14 @@ printer must be idle to receive files.
 - The result lands in Print files, linked to its model. The copy count becomes
   the job's **items per plate**, so 4 copies counts as 4 items in Totals.
   **Send & print…** goes straight to the print dialog.
+- **Previews:** sliced files include preview pictures in the sizes and formats
+  the printer's profile asks for, so the printer's own screen shows what's
+  printing (instead of a generic file icon). OrcaSlicer's command-line slicer
+  doesn't make them, so the hub draws them from the sliced toolpaths: every
+  copy on the plate, in the filament colour. The same preview appears in the
+  library and next to the job on printer cards; files sliced elsewhere show the
+  previews they already contain. Files sliced before v0.12 have none: slice
+  them again to get one.
 - Kobra X slices get a `; paint_info` header line (Anycubic Slicer Next writes
   one; Orca doesn't), so the printer can report the file's color for slot mapping.
 - The slicer flattens Orca's `inherits` chains into standalone presets and fixes

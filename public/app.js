@@ -18,6 +18,15 @@ function dur(sec) {
 }
 // "Auto-leveling · Est. print time 1h 23m" for a printer getting ready to print.
 const prepLine = (job) => [job.stage || 'Getting ready', job.estimate && `Est. print time ${dur(job.estimate)}`].filter(Boolean).join(' · ');
+// The print's preview beside its name; the image only reloads when the file changes.
+function setThumb(img, state) {
+  const job = state.job;
+  const want = job?.thumb ? `/api/printers/${encodeURIComponent(state.id)}/thumb?f=${encodeURIComponent(job.file)}` : '';
+  if (img.dataset.src === want) return;
+  img.dataset.src = want;
+  img.hidden = !want;
+  if (want) { img.onerror = () => { img.hidden = true; }; img.src = want; } else img.removeAttribute('src');
+}
 const deg = (t) => (t == null ? '—' : `${Math.round(t)}°`);
 
 function toast(msg, bad = false) {
@@ -161,6 +170,7 @@ function render(state) {
     const prep = s === 'preparing';
     q('.file').textContent = prep ? `Preparing ${job.file || 'print'}` : job.file || 'Untitled';
     q('.file').title = job.file || '';
+    setThumb(q('.job-thumb'), state);
     q('.stage').hidden = !prep;
     q('.stage').textContent = prep ? prepLine(job) : '';
     q('.fill').style.width = `${Math.min(100, job.progress || 0)}%`;

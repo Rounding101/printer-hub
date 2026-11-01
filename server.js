@@ -82,6 +82,8 @@ function onPrinterUpdate(state) {
   if (state.job?.file && !state.job.remaining && state.job.estimate === undefined) {
     state.job.estimate = parseDuration(library.findByName(state.job.file)?.estimate);
   }
+  // Printers that don't serve a preview themselves can use the library's copy.
+  if (state.job?.file && !state.job.thumb) state.job.thumb = !!library.findByName(state.job.file)?.thumb;
   jobs.observe(state);
   broadcast('printer', state);
 }
@@ -368,6 +370,15 @@ async function authRoutes(req, res, url, parts, ctx) {
   return json(res, 404, { error: 'Not found' }), true;
 }
 
+// A preview image from the library (they never change, so browsers may cache them).
+function sendThumb(res, file) {
+  fs.readFile(file, (err, buf) => {
+    if (err) return json(res, 404, { error: 'No preview' });
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400', ...SECURITY_HEADERS });
+    res.end(buf);
+  });
+}
+
 function readBody(req) {
   return new Promise((resolve) => {
     let data = '';
@@ -587,6 +598,10 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, await library.addFromStream(url.searchParams.get('name'), req));
       }
       const item = library.get(parts[2]);
+      if (parts[3] === 'thumb' && req.method === 'GET') {
+        const p = library.thumbPath(item);
+        return p ? sendThumb(res, p) : json(res, 404, { error: 'No preview' });
+      }
       if (parts[3] === 'download' && req.method === 'GET') {
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
@@ -628,7 +643,13 @@ const server = http.createServer(async (req, res) => {
         return proxy(req, res, printer.cameraSource());
       }
       if (resource === 'snapshot') return proxy(req, res, printer.snapshotSource());
-      if (resource === 'thumb') return proxy(req, res, printer.thumbSource());
+      if (resource === 'thumb') {
+        const source = printer.thumbSource();
+        if (source) return proxy(req, res, source);
+        const own = library.thumbPath(printer.state.job && library.findByName(printer.state.job.file));
+        if (own) return sendThumb(res, own);
+        return json(res, 404, { error: 'No preview' });
+      }
       if (resource === 'files') return json(res, 200, await printer.listFiles());
       if (resource === 'print-options') return json(res, 200, await printer.printOptions(String(url.searchParams.get('file') || '')));
     }

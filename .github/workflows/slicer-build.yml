@@ -46,5 +46,8 @@ jobs:
               '{input:"/data/models/part.step", vendor:$v, machine:$m, process:$p.defaults.process, filament:$p.defaults.filament, orient:true}')
             res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$mc: $res"
             # PLA bed at a PLA temperature, not Orca's 45 °C fallback for a plate the filament doesn't cover.
-            echo "$res" | jq -e '.stats.layers > 10 and .stats.bedTemp >= 50'
+            echo "$res" | jq -e '.stats.layers > 10 and .stats.bedTemp >= 50 and .thumbnail == true'
+            # Screen previews in the formats the profile asks for (QOI on Prusa, PNG elsewhere).
+            f=data/$(echo "$res" | jq -r .output | sed 's#^/data/##')
+            grep -E '^; thumbnail(_QOI)? begin [0-9]+x[0-9]+ [0-9]+$' "$f" | tee /dev/stderr | grep -q .
           done

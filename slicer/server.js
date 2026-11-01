@@ -7,6 +7,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { ProfileStore } = require('./profiles');
+const { addThumbnails } = require('./thumbnail');
 
 const PORT = Number(process.env.PORT) || 8080;
 const ORCA_BIN = process.env.ORCA_BIN || '/opt/orca/AppRun';
@@ -184,7 +185,10 @@ async function slice(req) {
     const file = path.join(dir, gcode);
     const stats = gcodeStats(file);
     if (req.paintInfo) injectPaintInfo(file, stats);
-    return { id, output: file, seconds: Math.round((Date.now() - t0) / 1000), copies, stats };
+    // Preview images for the printer's screen, in the sizes its profile asks for.
+    let thumbnail = false;
+    try { thumbnail = !!addThumbnails(file, machineCfg); } catch (err) { console.warn(`Thumbnail skipped: ${err.message}`); }
+    return { id, output: file, seconds: Math.round((Date.now() - t0) / 1000), copies, stats, thumbnail };
   } catch (err) {
     fs.rmSync(dir, { recursive: true, force: true });
     throw err;

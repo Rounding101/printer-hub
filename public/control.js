@@ -1,5 +1,5 @@
 // Per-printer control view (#control/<id>): camera, status, jog, temperatures,
-// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), prepLine(), cards,
+// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), prepLine(), setThumb(), cards,
 // mountCamera(), confirmCancel() and STATUS_LABEL from app.js.
 const Control = (() => {
   const $ = (id) => document.getElementById(id);
@@ -65,6 +65,7 @@ const Control = (() => {
     root.dataset.s = s;
     const prep = s === 'preparing' && job;
     $('ctl-file-name').textContent = prep ? `Preparing ${job.file || 'print'}` : job?.file || (state.online ? 'No active job' : 'Printer offline');
+    setThumb($('ctl-thumb'), state);
     $('ctl-stage').hidden = !prep;
     $('ctl-stage').textContent = prep ? prepLine(job) : '';
     $('ctl-file-name').title = job?.file || '';

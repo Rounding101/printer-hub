@@ -3,6 +3,23 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.12.0 — 2026-10-31
+
+### Added
+- **Print previews on the printer's screen.** Files the hub slices now include
+  preview images in the sizes and formats each printer's profile asks for
+  (e.g. 140×110 on the Adventurer 5M, 230×110 on the Kobra X, QOI images on
+  Prusa printers, 32×32 and 300×300 for Klipper). They're drawn from the
+  sliced toolpaths, so they show exactly what will print: every copy on the
+  plate, as arranged.
+- Previews in the hub: next to each file in the library, and next to the job
+  on printer cards and the control panel. Files sliced elsewhere show their
+  own embedded previews.
+
+### Fixed
+- Library and totals tables: the action buttons' column no longer breaks the
+  row lines.
+
 ## 0.11.0 — 2026-10-31
 
 The first public release.

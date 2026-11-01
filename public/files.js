@@ -242,7 +242,15 @@ const Files = (() => {
       const added = new Date(i.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const sent = (i.sentTo || []).map(printerName).join(', ');
       const model = i.modelId && library.find((m) => m.id === i.modelId);
-      name.append(
+      // Preview from the file (the hub's slicer, or the slicer that made it), else an empty tile.
+      const thumb = i.thumb
+        ? Object.assign(document.createElement('img'), { className: 'lib-thumb', src: `/api/library/${enc(i.id)}/thumb`, alt: '', loading: 'lazy' })
+        : Object.assign(document.createElement('span'), { className: 'lib-thumb empty' });
+      const text = Object.assign(document.createElement('span'), { className: 'lib-text' });
+      const row = Object.assign(document.createElement('div'), { className: 'lib-row' });
+      row.append(thumb, text);
+      name.append(row);
+      text.append(
         Object.assign(document.createElement('span'), { className: 'lib-name', textContent: i.name }),
         Object.assign(document.createElement('span'), {
           className: 'lib-sub',

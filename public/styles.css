@@ -234,7 +234,7 @@ select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .table .strong { font-weight: 700; }
 .table .nowrap { white-space: nowrap; }
 .table .item { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
-.table .actions { text-align: right; white-space: nowrap; }
+.table td.actions { display: table-cell; text-align: right; white-space: nowrap; } /* not the flex .actions row */
 .row-actions { display: inline-flex; gap: 6px; }
 .table-empty { margin: 0; padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
 .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
@@ -291,6 +291,10 @@ select.small { padding: 4px 8px; font-size: 13px; max-width: 150px; }
 .btn.icon { padding: 4px 8px; min-width: 30px; justify-content: center; }
 #lib-body .row-actions { flex-wrap: wrap; justify-content: flex-end; }
 .lib-name, .lib-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lib-text { min-width: 0; }
+.lib-thumb { flex: none; width: 52px; height: 52px; border-radius: 8px; object-fit: contain; background: var(--surface-2); }
+.lib-thumb.empty { display: block; }
 .lib-sub { font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 
 .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); align-self: flex-end; }
@@ -338,7 +342,6 @@ select.small { padding: 4px 8px; font-size: 13px; max-width: 150px; }
 .ctl-cam { border-radius: 12px; overflow: hidden; height: 100%; min-height: 280px; aspect-ratio: auto; }
 .ctl-status { display: flex; flex-direction: column; gap: 12px; }
 .ctl-status .name { font-size: 18px; }
-.ctl-status .stage { margin: -16px 0 0; }
 .ctl-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
 .ctl-facts div { display: flex; flex-direction: column; }
 .ctl-facts dt { font-size: 12px; color: var(--muted); }
@@ -510,3 +513,11 @@ dialog.wide { width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 32
   display: block; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
   font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
 }
+
+/* Print preview beside the job name (cards and control panel) */
+.job-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; min-width: 0; }
+.job-title { min-width: 0; flex: 1; }
+.job-title .file { margin: 0; }
+.job-title .stage { margin: 2px 0 0; }
+.job-thumb { flex: none; width: 64px; height: 64px; object-fit: contain; border-radius: 10px; background: var(--surface-2); }
+.ctl-status .job-head { margin-bottom: 0; }

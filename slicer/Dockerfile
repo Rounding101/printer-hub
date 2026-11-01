@@ -75,7 +75,7 @@ RUN apt-get -o Acquire::Retries=5 update \
     && /opt/step2stl/step2stl /opt/step2stl/test.step /tmp/test.stl && rm /tmp/test.stl
 
 WORKDIR /app
-COPY profiles.js server.js selftest.js ./
+COPY profiles.js server.js selftest.js thumbnail.js ./
 
 # Fail the build now if Orca can't actually slice for either printer, or a STEP part.
 RUN DATA_DIR=/tmp/selftest-data ORCA_HOME=/tmp/selftest-home node selftest.js \

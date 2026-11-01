@@ -30,6 +30,11 @@ function cubeStl(size = 20) {
     // PLA on the default plate should heat the bed properly (a Cool Plate
     // fallback gave 35 °C on the Kobra X).
     if (!(r.stats.bedTemp >= 45)) throw new Error(`${t.machine}: bed only ${r.stats.bedTemp} °C on ${r.stats.bedType}`);
+    // The printer's screen preview, in the size its profile asks for.
+    const want = { Anycubic: '230x110', Flashforge: '140x110' }[t.vendor];
+    if (!new RegExp(`^; thumbnail begin ${want} \\d+$`, 'm').test(fs.readFileSync(r.output, 'latin1').slice(0, 200000))) {
+      throw new Error(`${t.machine}: no ${want} preview image in the G-code`);
+    }
     console.log(`selftest ok: ${t.machine} -> ${r.stats.layers} layers, ${r.stats.grams} g, ${r.stats.time}, bed ${r.stats.bedTemp} °C (${r.stats.bedType})`);
   }
 

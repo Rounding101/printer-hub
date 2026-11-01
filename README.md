@@ -34,7 +34,7 @@ on one page you can open from any browser or phone.
 - 📚 **File library:** keep your G-code in one place and send it to any printer; files sliced for another printer are blocked
 - 🧵 **Filament tracking:** how much is left on each roll, from what each print used
 - 🎞️ **Timelapses:** every print recorded from the camera as a short video, cropped to the build plate. Klipper and OctoPrint printers' own timelapses show up too
-- 📈 **Job log:** every print recorded automatically, with totals per model and CSV export
+- 📈 **Job log:** every print recorded automatically, which printer made it, totals per item and CSV export
 - 👥 **Accounts:** admin, operator and watch-only viewer roles
 
 ## Install in one minute
@@ -49,7 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/Shawman511/printer-hub/main/install
 
 The installer starts Printer Hub and prints its address and a one-time setup
 code. Open the address, enter the code to create your admin account, and click
-**Add a printer**. That's it.
+**Add a printer**. The form asks for what your type of printer needs and tests
+the connection before you save. Timelapses and the camera crop are per printer,
+under **Settings → Printers**.
 
 <details>
 <summary><strong>Prefer Docker Compose?</strong></summary>
@@ -58,7 +60,7 @@ code. Open the address, enter the code to create your admin account, and click
 mkdir printer-hub && cd printer-hub
 curl -fsSLO https://raw.githubusercontent.com/Shawman511/printer-hub/main/deploy/docker-compose.yml
 docker compose up -d
-docker logs printer-hub 2>&1 | grep "setup code"
+docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
 ```
 
 Then open `http://<this machine's IP>:3000`.
@@ -73,11 +75,36 @@ docker run -d --name printer-hub --restart unless-stopped -p 3000:3000 -v printe
 </details>
 
 <details>
+<summary><strong>Build from source?</strong></summary>
+
+```bash
+git clone https://github.com/Shawman511/printer-hub.git
+cd printer-hub
+docker compose up -d --build
+docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
+```
+
+The first build takes 10–15 minutes and needs about 10 GB of free disk space.
+</details>
+
+<details>
 <summary><strong>Windows, Portainer, Unraid, TrueNAS, Raspberry Pi…</strong></summary>
 
 See the [installation guide](docs/installation.md): Docker Desktop on Windows,
 stacks in Docker UIs, ARM machines (everything but slicing works), updates,
 backups, HTTPS and all settings.
+</details>
+
+<details>
+<summary><strong>Setting it up with an AI coding agent?</strong></summary>
+
+Give Claude Code, or any agent that can run commands on the machine, this prompt:
+
+> Install Printer Hub on this machine by following
+> https://github.com/Shawman511/printer-hub/blob/main/AGENTS.md
+
+[AGENTS.md](AGENTS.md) has the exact commands, how to check each step, and what
+the agent has to ask you before doing.
 </details>
 
 **Update** by running the installer again (or `docker compose pull && docker compose up -d`).
@@ -116,7 +143,7 @@ OrcaSlicer ships), and generic Klipper/Marlin profiles for anything else.
 | ![Library](docs/screenshots/library.png) | ![3D preview](docs/screenshots/preview.png) |
 | **Library:** print files with the printer they were sliced for | **3D preview** with dimensions |
 | ![Job log](docs/screenshots/jobs.png) | ![Totals](docs/screenshots/totals.png) |
-| **Job log:** every print, outcome, items and filament | **Totals** per model |
+| **Job log:** every print, outcome, items and filament | **By item:** totals per model, and which printers made them |
 | ![Settings](docs/screenshots/settings.png) | ![Add a printer](docs/screenshots/add-printer.png) |
 | **Settings:** your printers at a glance | **Add a printer** with a connection test |
 

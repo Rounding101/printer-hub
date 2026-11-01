@@ -53,7 +53,7 @@ every slot), so the hub tracks rolls itself:
   recalculated from the job log, so fixing a job's outcome corrects the roll.
 - **Adjust** sets the remaining grams after weighing a roll (subtract the empty
   spool, usually 200–250 g). Rolls are stored in `data/spools.json`.
-- The job log and Totals gain a Filament column, and the CSV gets `filament_g`.
+- The job log gains a Filament column, and the CSV gets `filament_g`.
 
 Safety: jog, home and motors off are refused while a print is running. The
 server enforces every limit, not just the UI.
@@ -104,7 +104,7 @@ printer must be idle to receive files.
   (off, normal or tree), walls, brim and auto-orient. The dialog remembers your
   last choices for each printer.
 - The result lands in Print files, linked to its model. The copy count becomes
-  the job's **items per plate**, so 4 copies counts as 4 items in Totals.
+  the job's **items per plate**, so 4 copies counts as 4 items.
   **Send & print…** goes straight to the print dialog.
 - **Previews:** sliced files include preview pictures in the sizes and formats
   the printer's profile asks for, so the printer's own screen shows what's
@@ -146,7 +146,7 @@ The hub records a timelapse of every print on printers with a camera, and the
   the live stream with FFmpeg (included in the Docker image). Running without
   Docker needs FFmpeg installed for the videos.
 
-## Job log and totals
+## Job log
 
 While the hub is running, it logs every print by itself: start, finish and
 outcome (completed, cancelled or failed), the file name, and print time. Jobs
@@ -160,8 +160,10 @@ are saved in `data/jobs.json`.
   prefix, filament, layer height and time suffix are stripped, so
   `1024-1448-Bracket_plate(01)_PLA_0.2_11h0m.gcode` and
   `1021-0900-Bracket_plate(01)_PLA_0.2_11h2m.gcode` both count as **Bracket**.
-- **Totals** shows items, plates, print hours and failures per model, with
-  filters for period (today, 7 days, 30 days, month, year), printer, and a search box.
+- **All prints** lists every job. **By item** adds them up per model: which
+  printers made it, items, plates, print hours and failures. Click an item to
+  see its prints. Both follow the filters for period (today, 7 days, 30 days,
+  month, year), printer, and the search box.
 - **Reprint** starts the same file on the same printer. The button is
   enabled when that printer is idle.
 - **Add past prints…** back-fills prints made before the hub was logging

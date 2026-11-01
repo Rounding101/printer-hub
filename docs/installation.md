@@ -9,13 +9,16 @@ your printers: a home server, a NAS, a mini PC or a Raspberry Pi.
 - [Option 1: the installer](#option-1-the-installer-linux-macos-nas-raspberry-pi)
 - [Option 2: Docker Compose](#option-2-docker-compose)
 - [Option 3: one `docker run`](#option-3-one-docker-run-no-slicer)
+- [Option 4: build from source](#option-4-build-from-source)
 - [Windows](#windows-docker-desktop)
 - [Portainer, Unraid, TrueNAS, Dockhand and other Docker UIs](#portainer-unraid-truenas-dockhand-and-other-docker-uis)
 - [Raspberry Pi and other ARM machines](#raspberry-pi-and-other-arm-machines)
 - [First sign-in](#first-sign-in)
-- [Updating, backups and uninstalling](#updating)
+- [Updating](#updating), [backups](#backups) and [uninstalling](#uninstalling)
 - [HTTPS and remote access](#https-and-remote-access)
 - [Settings reference](#settings-reference)
+
+Setting up with an AI coding agent? Point it at [AGENTS.md](../AGENTS.md).
 
 ## Before you start
 
@@ -65,7 +68,7 @@ file next to the compose file:
 ```bash
 HUB_PORT=3000          # port on this machine
 TZ=Europe/London       # your time zone, for the job log
-HUB_VERSION=0.11.0     # pin a release instead of "latest" (optional)
+HUB_VERSION=0.16.0     # pin a release instead of "latest" (optional)
 ```
 
 ## Option 3: one `docker run` (no slicer)
@@ -77,6 +80,21 @@ computer):
 docker run -d --name printer-hub --restart unless-stopped -p 3000:3000 -v printer-hub-data:/data ghcr.io/shawman511/printer-hub:latest
 ```
 
+## Option 4: build from source
+
+For running unreleased changes, or if you'd rather not use the published images:
+
+```bash
+git clone https://github.com/Shawman511/printer-hub.git
+cd printer-hub
+docker compose up -d --build
+```
+
+This uses the root [`compose.yaml`](../compose.yaml). The first build takes
+10–15 minutes and needs about 10 GB of free disk space. To update,
+`git pull && docker compose up -d --build`. Settings go in a `.env` file in the
+same folder, as in Option 2, except `HUB_VERSION`.
+
 ## Windows (Docker Desktop)
 
 Install [Docker Desktop](https://www.docker.com/products/docker-desktop/),
@@ -86,6 +104,7 @@ then in PowerShell:
 mkdir printer-hub; cd printer-hub
 curl.exe -fsSLO https://raw.githubusercontent.com/Shawman511/printer-hub/main/deploy/docker-compose.yml
 docker compose up -d
+docker logs printer-hub 2>&1 | Select-String "setup code" | Select-Object -Last 1
 ```
 
 ## Portainer, Unraid, TrueNAS, Dockhand and other Docker UIs
@@ -96,7 +115,9 @@ Create a **stack** (or "compose project") and paste the contents of
 
 To build from source instead (e.g. to run unreleased changes), point a Git
 stack at this repository and its root [`compose.yaml`](../compose.yaml). The
-first build takes 10–15 minutes.
+first build takes 10–15 minutes. Its volume name starts with the stack's name,
+so the backup commands below work on it unchanged, but `docker volume rm` needs
+the name from `docker volume ls`.
 
 ## Raspberry Pi and other ARM machines
 
@@ -112,10 +133,16 @@ sliced on your computer can be uploaded, sent and started as usual.
 2. Enter the **setup code** to create the admin account. The installer prints
    it; otherwise run:
    ```bash
-   docker logs printer-hub 2>&1 | grep "setup code"
+   docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
    ```
-3. Click **Add a printer**. See [Printers](printers.md) for what to enter for
-   each type.
+   Restarting the hub before you've used the code makes a new one, so use the
+   last one the log shows.
+3. Click **Add a printer**. Pick the type, enter what it asks for (each type's
+   settings are explained on the form and in [Printers](printers.md)), click
+   **Test connection**, then **Save**. Repeat for each printer.
+4. Choose each printer's options under **Settings → Printers**: timelapse
+   recording (on by default when the printer has a camera), the camera crop,
+   and which slicer profile it uses.
 
 Add more people under **Settings → Users** (admin, operator or watch-only
 viewer); see [Users and security](users-and-security.md).
@@ -138,17 +165,32 @@ Everything is in the `printer-hub-data` volume (`/data` in the containers):
 back it up:
 
 ```bash
-docker run --rm -v printer-hub-data:/data -v "$PWD":/backup alpine tar czf /backup/printer-hub-backup.tgz -C /data .
+docker run --rm --volumes-from printer-hub -v "$PWD":/backup alpine tar czf /backup/printer-hub-backup.tgz -C /data .
 ```
 
-Restore by extracting the archive into the volume while the hub is stopped.
+To restore, from the folder with the compose file and the archive:
+
+```bash
+docker compose stop
+docker run --rm --volumes-from printer-hub -v "$PWD":/backup alpine sh -c 'rm -rf /data/* && tar xzf /backup/printer-hub-backup.tgz -C /data'
+docker compose start
+```
 
 ## Uninstalling
 
+From the folder with the compose file (`~/printer-hub` if you used the installer):
+
 ```bash
-cd ~/printer-hub && docker compose down          # stop and remove the containers
-docker volume rm printer-hub-data                 # also delete all data (careful)
+docker compose down
 ```
+
+That keeps your data. To delete all of it too, including the downloaded images:
+
+```bash
+docker compose down -v --rmi all
+```
+
+For Option 3, `docker rm -f printer-hub` and `docker volume rm printer-hub-data`.
 
 ## HTTPS and remote access
 

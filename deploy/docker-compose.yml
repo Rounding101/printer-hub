@@ -1,7 +1,7 @@
 # Printer Hub from published images. Download this file, then:
 #   docker compose up -d
-# and open http://<this machine>:3000. The first-run setup code is in
-#   docker compose logs printer-hub
+# and open http://<this machine>:3000. The first-run setup code is in the log:
+#   docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
 services:
   printer-hub:
     image: ghcr.io/shawman511/printer-hub:${HUB_VERSION:-latest}
@@ -28,3 +28,4 @@ services:
 
 volumes:
   printer-hub-data:
+    name: printer-hub-data

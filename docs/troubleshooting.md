@@ -13,8 +13,18 @@ docker logs --tail 100 printer-hub-slicer
 
 **I don't have the setup code.**
 It's printed when the hub starts with no admin account:
-`docker logs printer-hub 2>&1 | grep "setup code"`. If the log has rolled
-over, restart the container (`docker restart printer-hub`) and look again.
+`docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1`. A restart makes a new
+code, so use the last one. If the log is empty, restart the container
+(`docker restart printer-hub`) and look again. If the page asks you to sign in
+instead, an admin account already exists; see the next question.
+
+**The port is already in use.**
+Set another one with `HUB_PORT=8080` in the `.env` file next to the compose file
+(or `HUB_PORT=8080` before the installer's `sh`), then `docker compose up -d`.
+
+**`docker: permission denied` on the socket.**
+Your user isn't in the `docker` group: `sudo usermod -aG docker $USER`, then log
+out and back in, or run the commands with `sudo`.
 
 **I forgot the admin password.**
 Set the environment variable `HUB_RESET_PASSWORD=<username>` on the

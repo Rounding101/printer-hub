@@ -60,7 +60,7 @@ body {
 .brand-text h1 { white-space: nowrap; }
 .version { color: var(--muted); font-size: 11px; white-space: nowrap; cursor: default; }
 .version:empty { display: none; }
-.logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); }
+.logo { width: 30px; height: 30px; flex: none; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23f5a04f'/><stop offset='1' stop-color='%23df7426'/></linearGradient></defs><rect x='4' y='4' width='88' height='88' rx='22' fill='url(%23g)'/><rect x='33' y='16' width='30' height='14' rx='4' fill='white'/><path d='M39 30h18l-6 13h-6z' fill='white'/><rect x='35' y='49' width='26' height='8' rx='4' fill='white'/><rect x='27' y='60' width='42' height='8' rx='4' fill='white' opacity='.85'/><rect x='19' y='71' width='58' height='8' rx='4' fill='white' opacity='.7'/></svg>") center / contain no-repeat; }
 .topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 .summary { margin: 0 0 0 auto; color: var(--muted); font-size: 14px; }
 .conn { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
@@ -568,3 +568,8 @@ dialog.video-dlg video { width: 100%; max-height: 70vh; background: #000; border
   background: rgb(0 0 0 / 0.55); color: #ff6b6b; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
 }
 .job-reason { white-space: normal; }
+
+/* Job log: all prints / by item */
+.jobs-seg { align-self: flex-start; display: flex; width: fit-content; margin: 0; }
+.item-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.item-link:hover { color: var(--accent); text-decoration: underline; }

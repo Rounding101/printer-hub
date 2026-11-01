@@ -1,4 +1,4 @@
-// Job log + totals views. Uses api(), toast(), dur() and cards from app.js.
+// Job log view: every print, or added up per item. Uses api(), toast(), dur() and cards from app.js.
 const Jobs = (() => {
   let jobs = [];
   const $ = (id) => document.getElementById(id);
@@ -110,7 +110,8 @@ const Jobs = (() => {
   function renderTotals(list) {
     const groups = new Map();
     for (const j of list) {
-      const g = groups.get(key(j)) || { item: j.item, items: 0, plates: 0, secs: 0, grams: 0, bad: 0, last: null, qtys: new Set() };
+      const g = groups.get(key(j)) || { item: j.item, printers: new Set(), items: 0, plates: 0, secs: 0, grams: 0, bad: 0, last: null, qtys: new Set() };
+      if (['completed', 'failed', 'cancelled'].includes(j.outcome)) g.printers.add(j.printerName);
       if (j.outcome === 'completed') {
         g.items += j.quantity; g.plates += 1; g.secs += j.printSeconds || 0; g.grams += j.grams || 0; g.qtys.add(j.quantity);
         if (!g.last || j.startedAt > g.last.startedAt) g.last = j;
@@ -122,7 +123,11 @@ const Jobs = (() => {
     const rows = [...groups.values()].filter((g) => g.plates || g.bad).sort((a, b) => b.items - a.items || b.plates - a.plates);
     $('totals-body').replaceChildren(...rows.map((g) => {
       const tr = document.createElement('tr');
-      cell(tr, g.item, 'item');
+      // The item's name opens its prints, to see each one.
+      const open = Object.assign(document.createElement('button'), { type: 'button', className: 'item-link', textContent: g.item, title: 'Show these prints' });
+      open.onclick = () => { $('f-search').value = g.item; location.hash = '#jobs'; };
+      cell(tr, open, 'item');
+      cell(tr, [...g.printers].join(', '));
       cell(tr, g.items.toLocaleString(), 'num strong');
       cell(tr, g.plates.toLocaleString(), 'num');
       cell(tr, [...g.qtys].sort((a, b) => a - b).join(', ') || '—', 'num');
@@ -141,6 +146,16 @@ const Jobs = (() => {
     $('t-plates').textContent = done.length.toLocaleString();
     $('t-hours').textContent = hours(list.reduce((n, j) => n + (j.outcome === 'printing' ? 0 : j.printSeconds || 0), 0));
     $('t-rate').textContent = done.length + bad ? `${Math.round((done.length / (done.length + bad)) * 100)}%` : '—';
+  }
+
+  // #jobs is every print, #jobs/items the totals per item.
+  function show(tab) {
+    const items = tab === 'items';
+    $('jobs-all').hidden = items;
+    $('jobs-items').hidden = !items;
+    $('jobs-tab-all').setAttribute('aria-selected', String(!items));
+    $('jobs-tab-items').setAttribute('aria-selected', String(items));
+    render();
   }
 
   function render() {
@@ -207,7 +222,9 @@ const Jobs = (() => {
   document.addEventListener('DOMContentLoaded', () => {
     initDialog();
     for (const id of ['f-period', 'f-printer', 'f-search']) $(id).addEventListener('input', render);
+    $('jobs-tab-all').onclick = () => { location.hash = '#jobs'; };
+    $('jobs-tab-items').onclick = () => { location.hash = '#jobs/items'; };
   });
 
-  return { setAll, upsert, render, syncPrinters };
+  return { setAll, upsert, render, show, syncPrinters };
 })();

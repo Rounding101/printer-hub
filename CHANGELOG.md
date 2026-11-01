@@ -3,6 +3,24 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.16.0 — 2026-11-01
+
+### Changed
+- **Job log and Totals are one page.** The job log has two tabs, **All prints**
+  and **By item**, with the same filters and tiles. By item now shows which
+  printers made each item, and clicking an item shows its prints.
+- **New logo**, in the top bar, the browser tab and the sign-in page.
+
+### Install
+- **[AGENTS.md](AGENTS.md):** exact steps for an AI coding agent to deploy the
+  hub and add printers, including what it must ask first.
+- New **build from source** route in the installation guide.
+- The published compose file names its volume `printer-hub-data`, so the backup
+  and uninstall commands work whatever folder it's in.
+- The setup code command shows only the newest code; a Windows version is added.
+- Backup commands work on every install route, and restoring is now spelled out.
+- A new `deploy-check` workflow runs the documented routes on clean machines.
+
 ## 0.15.1 — 2026-11-01
 
 ### Fixed

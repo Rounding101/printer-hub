@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Printer Hub</title>
   <link rel="stylesheet" href="/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='4' width='24' height='24' rx='5' fill='%23e0883a'/><rect x='10' y='10' width='12' height='4' fill='white'/><rect x='14' y='14' width='4' height='8' fill='white'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23f5a04f'/><stop offset='1' stop-color='%23df7426'/></linearGradient></defs><rect x='4' y='4' width='88' height='88' rx='22' fill='url(%23g)'/><rect x='33' y='16' width='30' height='14' rx='4' fill='white'/><path d='M39 30h18l-6 13h-6z' fill='white'/><rect x='35' y='49' width='26' height='8' rx='4' fill='white'/><rect x='27' y='60' width='42' height='8' rx='4' fill='white' opacity='.85'/><rect x='19' y='71' width='58' height='8' rx='4' fill='white' opacity='.7'/></svg>">
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,6 @@
       <a href="#printers" data-view="printers">Printers</a>
       <a href="#library" data-view="library">Library</a>
       <a href="#jobs" data-view="jobs">Job log</a>
-      <a href="#totals" data-view="totals">Totals</a>
       <a href="#timelapses" data-view="timelapses">Timelapses</a>
       <a href="#settings" data-view="settings" id="nav-settings" hidden>Settings</a>
     </nav>
@@ -183,7 +182,7 @@
     </div>
   </section>
 
-  <section class="view page" data-view="jobs totals" hidden>
+  <section class="view page" data-view="jobs" hidden>
     <div class="toolbar">
       <label>Period
         <select id="f-period">
@@ -214,7 +213,12 @@
       <div class="tile"><span class="k">Success rate</span><span class="tile-v" id="t-rate">—</span></div>
     </div>
 
-    <div class="table-wrap" data-sub="jobs">
+    <div class="seg jobs-seg" role="tablist" aria-label="Show">
+      <button type="button" role="tab" id="jobs-tab-all" data-jobs-tab="all">All prints</button>
+      <button type="button" role="tab" id="jobs-tab-items" data-jobs-tab="items">By item</button>
+    </div>
+
+    <div class="table-wrap" id="jobs-all">
       <table class="table">
         <thead><tr><th>Started</th><th>Printer</th><th>Item</th><th>Outcome</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Filament</th><th></th></tr></thead>
         <tbody id="jobs-body"></tbody>
@@ -222,9 +226,9 @@
       <p class="table-empty" id="jobs-empty">No jobs yet. Prints are logged automatically while the hub is running.</p>
     </div>
 
-    <div class="table-wrap" data-sub="totals">
+    <div class="table-wrap" id="jobs-items" hidden>
       <table class="table">
-        <thead><tr><th>Item</th><th class="num">Items</th><th class="num">Plates</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Filament</th><th class="num">Failed / cancelled</th><th>Last printed</th><th></th></tr></thead>
+        <thead><tr><th>Item</th><th>Printer</th><th class="num">Items</th><th class="num">Plates</th><th class="num">Items / plate</th><th class="num">Print time</th><th class="num">Filament</th><th class="num">Failed / cancelled</th><th>Last printed</th><th></th></tr></thead>
         <tbody id="totals-body"></tbody>
       </table>
       <p class="table-empty" id="totals-empty">Nothing printed in this period.</p>

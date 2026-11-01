@@ -7,7 +7,7 @@ user. Only the sign-in page and `/api/health` are open.
 
 - **First run:** the hub prints a one-time **setup code** in its log
   (`*** First run: ... setup code XXXXX-XXXXX`; with Docker,
-  `docker compose logs printer-hub`). Open the hub, enter the code, and create
+  `docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1`). Open the hub, enter the code, and create
   the admin account. After that, the code is gone.
 - **Settings → Users** (admins only) adds accounts with one of three roles:
   - **Admin**: everything, including printers and users.

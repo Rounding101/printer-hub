@@ -307,8 +307,10 @@ function confirmCancel(card, go) {
 // ---- Views ----------------------------------------------------------------------
 
 function showView() {
+  // The old Totals page is now a tab of the job log.
+  if (location.hash === '#totals') history.replaceState(null, '', '#jobs/items');
   const [view, arg] = (location.hash.slice(1) || 'printers').split('/');
-  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'timelapses', 'account', 'settings', 'users'].includes(view) ? view : 'printers';
+  const known = ['printers', 'control', 'library', 'jobs', 'timelapses', 'account', 'settings', 'users'].includes(view) ? view : 'printers';
   if (known === 'control') {
     // Printers arrive over SSE; open once the card exists.
     const id = decodeURIComponent(arg || '');
@@ -319,8 +321,7 @@ function showView() {
   const navFor = { control: 'printers', users: 'settings' }[known] || known;
   document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === navFor ? 'page' : 'false'));
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
-  document.querySelectorAll('[data-sub]').forEach((el) => { el.hidden = el.dataset.sub !== known; });
-  if (known === 'jobs' || known === 'totals') Jobs.render();
+  if (known === 'jobs') Jobs.show(arg);
   if (known === 'account') Account.renderAccount();
   if (known === 'users') Account.renderUsers();
   if (known === 'timelapses') Timelapses.render();

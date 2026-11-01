@@ -198,3 +198,21 @@ test('FlashForge: Clear sends setClearPlatform (needs the check code)', async ()
   tcp.post = async () => { throw new Error('should not be called'); };
   await tcp.clear();
 });
+
+test('Klipper and OctoPrint: their own timelapses are listed and fetchable', async () => {
+  const fetchSource = async (src) => (await fetch(src.url, { headers: src.headers })).text();
+  const mr = await fakeMoonraker();
+  await withDriver(MoonrakerDriver, {}, mr, async (d) => {
+    const list = await d.listTimelapses();
+    assert.deepEqual(list.map((t) => t.name), ['timelapse_cube_202610311200.mp4']); // videos only
+    assert.equal(await fetchSource(d.timelapseSource(list[0].name)), 'MP4!');
+  });
+  const op = await fakeOctoPrint({ apiKey: 'KEY' });
+  await withDriver(OctoPrintDriver, { apiKey: 'KEY' }, op, async (d) => {
+    const list = await d.listTimelapses();
+    assert.equal(list[0].name, 'benchy_20261031.mp4');
+    assert.equal(list[0].size, 5);
+    assert.ok(list[0].date > 0);
+    assert.equal(await fetchSource(d.timelapseSource(list[0].name)), 'MP4!!');
+  });
+});

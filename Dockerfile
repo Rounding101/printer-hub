@@ -5,6 +5,9 @@ ENV NODE_ENV=production \
     CONFIG_PATH=/app/config.docker.json \
     DATA_DIR=/data
 
+# FFmpeg turns timelapse frames into MP4s (and grabs frames from video streams).
+RUN apk add --no-cache ffmpeg
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 

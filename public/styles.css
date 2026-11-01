@@ -540,3 +540,30 @@ body:not([data-role="admin"]) .cam-crop, .cam:not(.has-feed) .cam-crop, .cam.edi
 }
 .crop-hint { font-size: 13px; color: var(--muted); margin-right: 4px; }
 @media (max-width: 600px) { .crop-hint { display: none; } }
+
+/* ---- Timelapses ---- */
+.tl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.tl-card { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.tl-media { aspect-ratio: 16 / 9; border: 0; padding: 0; background: var(--cam-bg); cursor: pointer; display: grid; place-items: center; color: var(--muted); font: inherit; }
+.tl-media:disabled { cursor: default; }
+.tl-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tl-wait { font-size: 14px; }
+.tl-info { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; min-width: 0; }
+.tl-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-meta { font-size: 13px; color: var(--muted); }
+.tl-live { font-size: 13px; color: var(--danger); font-weight: 600; }
+.tl-error { font-size: 13px; color: var(--danger); }
+.tl-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.tl-empty { color: var(--muted); margin: 0; }
+.tl-native { list-style: none; margin: 0; padding: 0; }
+.tl-native li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.tl-native .tl-info { padding: 0; }
+.tl-native .tl-actions { margin: 0; flex: none; }
+dialog.video-dlg { width: min(960px, calc(100vw - 32px)); }
+dialog.video-dlg video { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; margin-top: 8px; }
+[data-role="viewer"] .tl-del { display: none; }
+/* Recording a timelapse: a small badge on the camera. */
+.cam.rec::before {
+  content: "● REC"; position: absolute; right: 10px; bottom: 10px; z-index: 1; padding: 2px 8px; border-radius: 6px;
+  background: rgb(0 0 0 / 0.55); color: #ff6b6b; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+}

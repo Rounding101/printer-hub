@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md)
 
-A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing) and the [job log](#job-log-and-totals).
+A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing), [timelapses](#timelapses) and the [job log](#job-log-and-totals).
 
 ## Control panel
 
@@ -121,6 +121,30 @@ printer must be idle to receive files.
   while that feature is off). When building from source, set a different Orca
   version with the `ORCA_VERSION` build argument.
 - Multi-color painting and placing parts by hand still need a desktop slicer.
+
+## Timelapses
+
+The hub records a timelapse of every print on printers with a camera, and the
+**Timelapses** page lists them.
+
+- **How:** one camera frame per layer (every 20 seconds if the printer
+  doesn't report layers), plus one at the end. When the print finishes the
+  frames become an MP4 of about 10 seconds, cropped like the printer's camera
+  (see **Crop** in the control panel). A **● REC** badge on the camera shows
+  a recording in progress.
+- **Watch, download or delete** them on the Timelapses page. Cancelled prints
+  get a video too, marked as such.
+- **Turn it off** per printer in Settings → Printers (Record a timelapse of
+  every print).
+- **Printers' own timelapses:** Klipper printers with moonraker-timelapse and
+  OctoPrint printers list their videos under **On your printers**, played and
+  downloaded through the hub.
+- The Kobra X and Adventurer 5M Pro keep their own timelapses on the printer
+  (USB export) or in the maker's cloud app, with no local way to fetch them, so
+  the hub records its own.
+- Frames are taken from the camera's snapshot address, or else grabbed from
+  the live stream with FFmpeg (included in the Docker image). Running without
+  Docker needs FFmpeg installed for the videos.
 
 ## Job log and totals
 

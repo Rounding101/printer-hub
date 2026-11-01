@@ -152,6 +152,16 @@ class OctoPrintDriver extends PrinterDriver {
     }
   }
 
+  // OctoPrint's own rendered timelapses.
+  async listTimelapses() {
+    const { files = [] } = await this.request('/api/timelapse?unrendered=false').catch(() => ({}));
+    return files.map((f) => ({ name: f.name, size: f.bytes ?? null, date: f.date ? Date.parse(f.date.replace(' ', 'T')) || null : null, url: f.url }));
+  }
+
+  timelapseSource(name) {
+    return { url: `${this.base}/downloads/timelapse/${encodeURIComponent(name)}`, headers: { 'X-Api-Key': this.cfg.apiKey || '' } };
+  }
+
   cameraUrl() {
     if (this.cfg.cameraUrl) return this.cfg.cameraUrl;
     return this.webcam ? this.webcam.stream : null;

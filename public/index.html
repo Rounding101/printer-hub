@@ -21,6 +21,7 @@
       <a href="#library" data-view="library">Library</a>
       <a href="#jobs" data-view="jobs">Job log</a>
       <a href="#totals" data-view="totals">Totals</a>
+      <a href="#timelapses" data-view="timelapses">Timelapses</a>
       <a href="#settings" data-view="settings" id="nav-settings" hidden>Settings</a>
     </nav>
     <p id="summary" class="summary">Connecting…</p>
@@ -412,6 +413,31 @@
     </section>
   </section>
 
+  <section class="view page" data-view="timelapses" hidden>
+    <div>
+      <h2 class="page-h">Timelapses</h2>
+      <p class="dlg-hint">Recorded from each printer's camera, one frame per layer, and cropped like the camera. Turn recording off per printer in Settings.</p>
+    </div>
+    <div class="tl-grid" id="tl-grid"></div>
+    <p class="tl-empty" id="tl-empty" hidden>No timelapses yet. They're made automatically for printers with a camera: start a print and it'll appear here when it finishes.</p>
+    <section class="panel" id="tl-printers" hidden>
+      <div class="panel-head"><h3>On your printers</h3></div>
+      <p class="dlg-hint">Timelapses stored on Klipper (moonraker-timelapse) and OctoPrint printers.</p>
+      <ul class="tl-native" id="tl-native"></ul>
+    </section>
+  </section>
+
+  <dialog id="tl-dlg" class="video-dlg">
+    <form method="dialog" class="dlg">
+      <h3 class="tl-title"></h3>
+      <video controls playsinline></video>
+      <div class="dlg-actions">
+        <a class="btn ghost tl-download" download>Download</a>
+        <button class="btn primary" value="close">Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <section class="view page narrow" data-view="settings" hidden>
     <h2 class="page-h">Settings</h2>
     <nav class="seg settings-tabs" aria-label="Settings sections">
@@ -469,6 +495,7 @@
       <p class="dlg-hint" id="ps-type-help"></p>
       <label>Name <input name="name" maxlength="40" required placeholder="e.g. Voron 2.4"></label>
       <div class="form" id="ps-fields"></div>
+      <label class="check"><input type="checkbox" name="timelapse" id="ps-timelapse" checked> Record a timelapse of every print (printers with a camera)</label>
       <fieldset class="ps-slicer">
         <legend>Slice with</legend>
         <div class="form-row">
@@ -564,6 +591,7 @@
   <script src="/control.js"></script>
   <script src="/account.js"></script>
   <script src="/setup.js"></script>
+  <script src="/timelapses.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

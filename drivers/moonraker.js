@@ -198,6 +198,17 @@ class MoonrakerDriver extends PrinterDriver {
     return url ? { url } : null;
   }
 
+  // Videos from moonraker-timelapse, if it's installed.
+  async listTimelapses() {
+    const files = await this.request('/server/files/list?root=timelapse').catch(() => []);
+    return (files || []).filter((f) => /\.(mp4|webm|mkv)$/i.test(f.path))
+      .map((f) => ({ name: f.path, size: f.size || null, date: f.modified ? f.modified * 1000 : null }));
+  }
+
+  timelapseSource(name) {
+    return { url: `${this.base}/server/files/timelapse/${name.split('/').map(encodeURIComponent).join('/')}`, headers: this.cfg.apiKey ? { 'X-Api-Key': this.cfg.apiKey } : {} };
+  }
+
   thumbSource() {
     if (!this.thumb) return null;
     const path = this.thumb.split('/').map(encodeURIComponent).join('/');

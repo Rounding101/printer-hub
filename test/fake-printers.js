@@ -44,7 +44,10 @@ async function fakeMoonraker({ apiKey, port } = {}) {
         return ok({ eventtime: 1, status });
       }
       case '/server/files/metadata': return ok({ estimated_time: 3600, thumbnails: [{ width: 32, relative_path: '.thumbs/cube-32x32.png' }, { width: 300, relative_path: '.thumbs/cube-300x300.png' }] });
-      case '/server/files/list': return ok(p.files);
+      case '/server/files/list':
+        if (url.searchParams.get('root') === 'timelapse') return ok([{ path: 'timelapse_cube_202610311200.mp4', modified: 1793450000, size: 4 }, { path: 'frame.jpg', modified: 1, size: 1 }]);
+        return ok(p.files);
+      case '/server/files/timelapse/timelapse_cube_202610311200.mp4': res.writeHead(200, { 'Content-Type': 'video/mp4' }); return res.end('MP4!');
       case '/server/webcams/list': return ok({ webcams: [{ name: 'cam', enabled: true, stream_url: '/webcam/?action=stream', snapshot_url: '/webcam/?action=snapshot' }] });
       case '/printer/print/start': Object.assign(p, { state: 'printing', filename: url.searchParams.get('filename'), progress: 0.25, duration: 900 }); return ok('ok');
       case '/printer/print/pause': p.state = 'paused'; return ok('ok');
@@ -107,6 +110,8 @@ async function fakeOctoPrint({ apiKey = 'KEY', port } = {}) {
       return send(res, 204);
     }
     if (url.pathname === '/api/files/local' && req.method === 'GET') return send(res, 200, { files: p.files });
+    if (url.pathname === '/api/timelapse') return send(res, 200, { files: [{ name: 'benchy_20261031.mp4', bytes: 5, date: '2026-10-31 12:00', url: '/downloads/timelapse/benchy_20261031.mp4' }] });
+    if (url.pathname === '/downloads/timelapse/benchy_20261031.mp4') { res.writeHead(200, { 'Content-Type': 'video/mp4' }); return res.end('MP4!!'); }
     if (url.pathname === '/api/files/local' && req.method === 'POST') {
       const name = multipartName(raw);
       p.files.push({ type: 'machinecode', path: name, name, size: 1, date: 10 });

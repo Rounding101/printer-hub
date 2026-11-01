@@ -9,6 +9,7 @@ const { MoonrakerDriver } = require('./drivers/moonraker');
 const { OctoPrintDriver } = require('./drivers/octoprint');
 const { PrusaLinkDriver } = require('./drivers/prusalink');
 const { PrinterStore } = require('./lib/printers');
+const { Timelapses } = require('./lib/timelapse');
 const { JobLog } = require('./lib/jobs');
 const { Library } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
@@ -53,6 +54,7 @@ const library = new Library(dataDir);
 const spools = new SpoolStore(dataDir, jobs);
 const auth = new AuthStore(dataDir);
 const printerStore = new PrinterStore(dataDir, DRIVERS, config.printers || []);
+const timelapses = new Timelapses(dataDir);
 const printers = new Map(); // id -> running driver
 
 // ---- Live updates (Server-Sent Events) ---------------------------------------
@@ -97,6 +99,8 @@ function onPrinterUpdate(state) {
   // Printers that don't serve a preview themselves can use the library's copy.
   if (state.job?.file && !state.job.thumb) state.job.thumb = !!library.findByName(state.job.file)?.thumb;
   jobs.observe(state);
+  const driver = printers.get(state.id);
+  if (driver) timelapses.observe(driver, state);
   broadcast('printer', view(state));
 }
 
@@ -146,9 +150,10 @@ async function testPrinter(cfg) {
 }
 
 for (const cfg of printerStore.all()) attach(cfg);
-// True when two printer configs differ only in their camera crop.
+// True when two printer configs differ only in hub-side settings (camera crop,
+// timelapses) that don't need the printer reconnected.
 const onlyCropChanged = (a, b) => {
-  const strip = ({ cameraCrop, ...rest }) => JSON.stringify(rest);
+  const strip = ({ cameraCrop, timelapse, ...rest }) => JSON.stringify(rest);
   return !!a && !!b && strip(a) === strip(b);
 };
 
@@ -165,6 +170,7 @@ printerStore.on('change', async ({ added, updated, removed, previous }) => {
   if (added || updated) attach(added || updated);
   broadcast('printers', snapshot());
 });
+timelapses.on('change', (list) => broadcast('timelapses', list));
 jobs.on('job', (job) => {
   broadcast('job', job);
   // Plan when a job opens; try once more when it ends if no weight was known yet.
@@ -397,6 +403,25 @@ async function authRoutes(req, res, url, parts, ctx) {
   return json(res, 404, { error: 'Not found' }), true;
 }
 
+// A file with Range support (videos must be seekable).
+function sendFile(req, res, file, type, extra = {}) {
+  let size;
+  try { size = fs.statSync(file).size; } catch { return json(res, 404, { error: 'Not found' }); }
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  let start = 0, end = size - 1, status = 200;
+  if (m && (m[1] || m[2])) {
+    start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start > end || start >= size) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+    status = 206;
+  }
+  res.writeHead(status, {
+    'Content-Type': type, 'Content-Length': end - start + 1, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=3600',
+    ...(status === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}), ...SECURITY_HEADERS, ...extra,
+  });
+  fs.createReadStream(file, { start, end }).pipe(res);
+}
+
 // A preview image from the library (they never change, so browsers may cache them).
 function sendThumb(res, file) {
   fs.readFile(file, (err, buf) => {
@@ -419,10 +444,13 @@ function readBody(req) {
 function proxy(req, res, source, { timeoutMs = 8000 } = {}) {
   if (!source) return json(res, 404, { error: 'Not available' });
   const lib = source.url.startsWith('https') ? https : http;
-  const upstream = lib.get(source.url, { headers: source.headers || {}, rejectUnauthorized: false }, (up) => {
+  // Range is passed through so videos can be seeked.
+  const range = req.headers.range ? { Range: req.headers.range } : {};
+  const upstream = lib.get(source.url, { headers: { ...(source.headers || {}), ...range }, rejectUnauthorized: false }, (up) => {
     const headers = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
-    if (up.headers['content-type']) headers['Content-Type'] = up.headers['content-type'];
-    if (up.headers['content-length']) headers['Content-Length'] = up.headers['content-length'];
+    for (const [from, to] of [['content-type', 'Content-Type'], ['content-length', 'Content-Length'], ['content-range', 'Content-Range'], ['accept-ranges', 'Accept-Ranges']]) {
+      if (up.headers[from]) headers[to] = up.headers[from];
+    }
     res.writeHead(up.statusCode || 502, headers);
     up.pipe(res);
     upstream.setTimeout(0);
@@ -444,6 +472,7 @@ const STATIC = {
   '/control.js': ['public/control.js', 'text/javascript; charset=utf-8'],
   '/account.js': ['public/account.js', 'text/javascript; charset=utf-8'],
   '/setup.js': ['public/setup.js', 'text/javascript; charset=utf-8'],
+  '/timelapses.js': ['public/timelapses.js', 'text/javascript; charset=utf-8'],
   '/login': ['public/login.html', 'text/html; charset=utf-8'],
   '/login.js': ['public/login.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['public/styles.css', 'text/css; charset=utf-8'],
@@ -553,6 +582,33 @@ const server = http.createServer(async (req, res) => {
       }
       if (parts[2] && req.method === 'PATCH') return json(res, 200, jobs.edit(parts[2], await readBody(req)));
       if (parts[2] && req.method === 'DELETE') { jobs.remove(parts[2]); return json(res, 200, { ok: true }); }
+      return json(res, 404, { error: 'Not found' });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
+  // /api/timelapses[/:id[/video|/poster]], /api/timelapses/printers — recorded here, and the printers' own
+  if (parts[1] === 'timelapses') {
+    try {
+      if (!parts[2] && req.method === 'GET') return json(res, 200, timelapses.list());
+      if (parts[2] === 'printers' && req.method === 'GET') {
+        // Timelapses stored on Klipper (moonraker-timelapse) and OctoPrint printers.
+        const out = await Promise.all([...printers.values()].filter((p) => p.listTimelapses && p.state.online).map(async (p) => ({
+          printerId: p.state.id, printerName: p.state.name,
+          items: await Promise.race([p.listTimelapses(), new Promise((r) => setTimeout(() => r([]), 6000))]).catch(() => []),
+        })));
+        return json(res, 200, out.filter((p) => p.items.length));
+      }
+      const item = timelapses.get(parts[2]);
+      if (parts[3] === 'video' && req.method === 'GET') {
+        if (item.status !== 'ready') return json(res, 404, { error: 'Not ready' });
+        const name = `${(item.file || 'timelapse').replace(/\.[^.]+$/, '')}_timelapse.mp4`;
+        return sendFile(req, res, timelapses.videoPath(item), 'video/mp4',
+          url.searchParams.has('download') ? { 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}` } : {});
+      }
+      if (parts[3] === 'poster' && req.method === 'GET') return sendFile(req, res, timelapses.posterPath(item), 'image/jpeg');
+      if (!parts[3] && req.method === 'DELETE') { timelapses.remove(item.id); return json(res, 200, { ok: true }); }
       return json(res, 404, { error: 'Not found' });
     } catch (err) {
       return json(res, 400, { error: err.message });
@@ -676,6 +732,11 @@ const server = http.createServer(async (req, res) => {
         return proxy(req, res, printer.cameraSource());
       }
       if (resource === 'snapshot') return proxy(req, res, printer.snapshotSource());
+      if (resource === 'timelapse') {
+        const name = url.searchParams.get('name') || '';
+        if (!printer.timelapseSource || !name || name.includes('..')) return json(res, 404, { error: 'Not found' });
+        return proxy(req, res, printer.timelapseSource(name), { timeoutMs: 30000 });
+      }
       if (resource === 'thumb') {
         const source = printer.thumbSource();
         if (source) return proxy(req, res, source);

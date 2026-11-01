@@ -3,6 +3,18 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.15.0 — 2026-10-31
+
+### Added
+- **Timelapses.** The hub records every print on printers with a camera: a
+  frame per layer, turned into a short MP4 when the print ends, cropped like
+  the camera. A new **Timelapses** page plays, downloads and deletes them, and
+  a **● REC** badge shows while recording. On by default; turn it off per
+  printer in Settings.
+- Timelapses made by Klipper (moonraker-timelapse) and OctoPrint printers are
+  listed on the same page and streamed through the hub.
+- The Docker image now includes FFmpeg.
+
 ## 0.14.0 — 2026-10-31
 
 ### Added

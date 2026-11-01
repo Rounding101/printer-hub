@@ -240,6 +240,7 @@ function render(state) {
   q('.act-light').title = state.light ? 'Light is on. Click to turn it off.' : 'Light is off. Click to turn it on.';
 
   setCrop(q('.cam'), state.cameraCrop);
+  q('.cam').classList.toggle('rec', Timelapses.recording(state.id));
   // The dashboard and control view each hold a camera stream; only run the visible one.
   if (document.querySelector('.view[data-view="control"]').hidden) mountCamera(card);
   else { card.player?.destroy(); card.player = null; card.camKind = undefined; card.el.querySelectorAll('.cam img, .cam video').forEach(stopMedia); }
@@ -307,7 +308,7 @@ function confirmCancel(card, go) {
 
 function showView() {
   const [view, arg] = (location.hash.slice(1) || 'printers').split('/');
-  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'account', 'settings', 'users'].includes(view) ? view : 'printers';
+  const known = ['printers', 'control', 'library', 'jobs', 'totals', 'timelapses', 'account', 'settings', 'users'].includes(view) ? view : 'printers';
   if (known === 'control') {
     // Printers arrive over SSE; open once the card exists.
     const id = decodeURIComponent(arg || '');
@@ -322,6 +323,7 @@ function showView() {
   if (known === 'jobs' || known === 'totals') Jobs.render();
   if (known === 'account') Account.renderAccount();
   if (known === 'users') Account.renderUsers();
+  if (known === 'timelapses') Timelapses.render();
   if (known === 'settings') {
     Setup.render();
     if (arg === 'add') { history.replaceState(null, '', '#settings'); Setup.open(); }
@@ -338,6 +340,7 @@ function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('snapshot', (e) => { conn.classList.add('live'); setPrinters(JSON.parse(e.data)); });
   es.addEventListener('printers', (e) => setPrinters(JSON.parse(e.data)));
+  es.addEventListener('timelapses', (e) => Timelapses.setAll(JSON.parse(e.data)));
   es.addEventListener('printer', (e) => render(JSON.parse(e.data)));
   es.addEventListener('jobs', (e) => Jobs.setAll(JSON.parse(e.data)));
   es.addEventListener('job', (e) => Jobs.upsert(JSON.parse(e.data)));

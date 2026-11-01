@@ -1,5 +1,6 @@
 // Simulated printer for trying the dashboard without hardware (npm run demo).
 const { PrinterDriver } = require('./base');
+const { png } = require('../slicer/thumbnail');
 
 const FILES = ['benchy.gcode', 'calibration_cube.gcode', 'phone_stand.3mf', 'cable_clip_x8.gcode'];
 
@@ -129,6 +130,27 @@ class MockDriver extends PrinterDriver {
   }
 
   // Streams a moving SVG test pattern as multipart/x-mixed-replace, like an MJPEG camera.
+  // A still for timelapses (the live view is SVG, which FFmpeg can't read):
+  // the bed, the part growing with progress, and the toolhead.
+  captureFrame() {
+    const w = 640, h = 360, img = Buffer.alloc(w * h * 4);
+    const rect = (x, y, rw, rh, [r, g, b]) => {
+      for (let j = Math.max(0, Math.floor(y)); j < Math.min(h, y + rh); j++) {
+        for (let i = Math.max(0, Math.floor(x)); i < Math.min(w, x + rw); i++) {
+          const o = (j * w + i) * 4;
+          img[o] = r; img[o + 1] = g; img[o + 2] = b; img[o + 3] = 255;
+        }
+      }
+    };
+    const s = this.sim, part = s.progress * 0.8, head = 200 + Math.sin(Date.now() / 900) * 120;
+    rect(0, 0, w, h, [29, 33, 39]);
+    rect(120, 250, 400, 18, [58, 65, 80]);
+    rect(290, 250 - part, 60, part, [224, 136, 58]);
+    rect(head, 150 - part * 0.4, 60, 40, [139, 147, 161]);
+    rect(head + 26, 190 - part * 0.4, 8, Math.max(4, 60 - part * 0.6), [201, 206, 214]);
+    return { data: png(w, h, img), type: 'image/png' };
+  }
+
   serveCamera(req, res) {
     const boundary = 'mockframe';
     res.writeHead(200, { 'Content-Type': `multipart/x-mixed-replace; boundary=${boundary}`, 'Cache-Control': 'no-store' });

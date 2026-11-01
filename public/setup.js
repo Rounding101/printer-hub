@@ -98,6 +98,7 @@ const Setup = (() => {
     typeSel.disabled = !!p; // a different type is a different printer
     form.elements.namedItem('name').value = p?.name || '';
     form.elements.namedItem('modelMatch').value = p?.modelMatch || '';
+    $('ps-timelapse').checked = p?.timelapse !== false;
     form.querySelector('.ps-advanced').open = !!p?.modelMatch;
     $('ps-delete').hidden = !p;
 
@@ -117,7 +118,10 @@ const Setup = (() => {
   function values() {
     const form = $('ps-form');
     const t = typeOf($('ps-type').value);
-    const out = { type: t.type, name: form.elements.namedItem('name').value.trim(), modelMatch: form.elements.namedItem('modelMatch').value.trim() };
+    const out = {
+      type: t.type, name: form.elements.namedItem('name').value.trim(),
+      modelMatch: form.elements.namedItem('modelMatch').value.trim(), timelapse: $('ps-timelapse').checked,
+    };
     for (const f of t.fields) {
       const input = form.elements[f.key];
       out[f.key] = f.type === 'checkbox' ? input.checked : input.value.trim();

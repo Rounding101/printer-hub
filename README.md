@@ -33,6 +33,7 @@ on one page you can open from any browser or phone.
 - 🧊 **Built-in slicer:** drop in an STL, 3MF or STEP file, slice it with OrcaSlicer's profile for your printer, and print. Sliced files carry a preview picture that shows on the printer's own screen
 - 📚 **File library:** keep your G-code in one place and send it to any printer; files sliced for another printer are blocked
 - 🧵 **Filament tracking:** how much is left on each roll, from what each print used
+- 🎞️ **Timelapses:** every print recorded from the camera as a short video, cropped to the build plate. Klipper and OctoPrint printers' own timelapses show up too
 - 📈 **Job log:** every print recorded automatically, with totals per model and CSV export
 - 👥 **Accounts:** admin, operator and watch-only viewer roles
 

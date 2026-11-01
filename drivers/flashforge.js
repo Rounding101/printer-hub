@@ -249,6 +249,12 @@ class FlashForgeDriver extends PrinterDriver {
     }
   }
 
+  // Dismisses the "print complete / clear the platform" prompt (also on the
+  // printer's screen) and returns it to ready.
+  async clear() {
+    if (this.mode === 'http') await this.httpControl('stateCtrl_cmd', { action: 'setClearPlatform' });
+  }
+
   async setLight(on) {
     await this.httpControl('lightControl_cmd', { status: on ? 'open' : 'close' });
   }

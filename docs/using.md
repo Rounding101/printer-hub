@@ -14,6 +14,12 @@ that printer:
 - **Camera** at full size.
 - **Status:** progress, layer, time remaining, and the clock time it will
   finish. Pause, resume, cancel, light, and motors off.
+- **Clear:** after a print finishes, the printer shows **Done** until you take
+  the part off. **Clear** (on the card or here) marks the plate as clear and
+  the printer as ready. The Adventurer 5M also dismisses its own "clear the
+  platform" prompt (needs the serial number and check code), and Klipper
+  printers reset like Mainsail's clear button. Other printers are shown as
+  ready by the hub until they start something new.
 - **Move:** XY jog pad, Z up/down, step size 0.1 / 1 / 10 / 50 mm, and home XY,
   Z or all.
 - **Temperatures:** nozzle and bed targets (slider or number), plus PLA, PETG

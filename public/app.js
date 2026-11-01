@@ -133,6 +133,7 @@ function createCard(state) {
   const q = (s) => el.querySelector(s);
   q('.act-pause').onclick = run(q('.act-pause'), 'pause');
   q('.act-resume').onclick = run(q('.act-resume'), 'resume');
+  q('.act-clear').onclick = run(q('.act-clear'), 'clear');
   q('.act-light').onclick = run(q('.act-light'), 'light', () => ({ on: !card.state.light }));
   q('.act-cancel').onclick = () => confirmCancel(card, run(q('.act-cancel'), 'cancel'));
   q('.act-print').onclick = () => Files.openPrinterFiles(card.state.id);
@@ -200,6 +201,7 @@ function render(state) {
   q('.act-pause').hidden = !(on && caps.pause && (s === 'printing' || s === 'heating'));
   q('.act-resume').hidden = !(on && caps.resume && s === 'paused');
   q('.act-cancel').hidden = !(on && caps.cancel && ['preparing', 'printing', 'heating', 'pausing', 'paused'].includes(s));
+  q('.act-clear').hidden = !(on && s === 'completed');
   q('.act-print').hidden = !(on && caps.files && ['idle', 'completed'].includes(s));
   q('.act-light').hidden = !(on && caps.light && state.light != null);
   q('.act-light').setAttribute('aria-checked', String(!!state.light));

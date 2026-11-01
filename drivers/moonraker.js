@@ -143,6 +143,9 @@ class MoonrakerDriver extends PrinterDriver {
   async resume() { await this.request('/printer/print/resume', { method: 'POST' }); }
   async cancel() { await this.request('/printer/print/cancel', { method: 'POST' }); }
 
+  // Back to "standby" after a finished print, like Mainsail/Fluidd's clear button.
+  async clear() { await this.gcode('SDCARD_RESET_FILE'); }
+
   async setLight(on) {
     if (!this.cfg.lightPin) throw new Error('Set a light pin in this printer’s settings');
     await this.gcode(`SET_PIN PIN=${this.cfg.lightPin} VALUE=${on ? 1 : 0}`);

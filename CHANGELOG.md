@@ -3,6 +3,14 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.13.0 — 2026-10-31
+
+### Added
+- **Clear** button for printers that show a finished print: marks the plate
+  as clear and the printer ready. On the Adventurer 5M it also dismisses the
+  printer's own "clear the platform" prompt; Klipper printers get
+  `SDCARD_RESET_FILE`. The job log keeps the finished print.
+
 ## 0.12.0 — 2026-10-31
 
 ### Added

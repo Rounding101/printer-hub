@@ -89,6 +89,7 @@ class MockDriver extends PrinterDriver {
 
   async pause() { if (this.sim.status === 'printing') this.sim.status = 'paused'; this.tick(); }
   async resume() { if (this.sim.status === 'paused') this.sim.status = 'printing'; this.tick(); }
+  async clear() { Object.assign(this.sim, { status: 'idle', file: null, progress: 0 }); this.tick(); }
   async cancel() { Object.assign(this.sim, { status: 'idle', file: null, progress: 0 }); this.tick(); }
   async setLight(on) { this.sim.light = on; this.tick(); }
   async listFiles() { return this.files.map((name) => ({ name })); }

@@ -185,3 +185,16 @@ test('PrusaLink: wrong password is reported', async () => {
     assert.match(s.error, /refused the password/);
   });
 });
+
+test('FlashForge: Clear sends setClearPlatform (needs the check code)', async () => {
+  const { FlashForgeDriver } = require('../drivers/flashforge');
+  const http = new FlashForgeDriver({ id: 'ff', host: '127.0.0.1', serialNumber: 'SN1', checkCode: 'abc' });
+  const sent = [];
+  http.post = async (path, body) => { sent.push({ path, body }); return { code: 0 }; };
+  await http.clear();
+  assert.deepEqual(sent, [{ path: '/control', body: { payload: { cmd: 'stateCtrl_cmd', args: { action: 'setClearPlatform' } } } }]);
+
+  const tcp = new FlashForgeDriver({ id: 'ff2', host: '127.0.0.1' }); // no check code: the hub clears it on its own
+  tcp.post = async () => { throw new Error('should not be called'); };
+  await tcp.clear();
+});

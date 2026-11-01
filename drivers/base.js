@@ -45,6 +45,9 @@ class PrinterDriver extends EventEmitter {
   async pause() { throw new Error('pause not supported'); }
   async resume() { throw new Error('resume not supported'); }
   async cancel() { throw new Error('cancel not supported'); }
+  // After a finished print: tell the printer the plate is clear. Printers
+  // without such a command are shown as ready by the hub instead (server.js).
+  async clear() {}
   async setLight() { throw new Error('light control not supported'); }
   async listFiles() { return []; }
   // { colors: [{index, color, material, slot}], slots: [{index, color, type, ready}], options: [{key, label, default}] }

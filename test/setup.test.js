@@ -132,3 +132,39 @@ test('add, test, mask secrets, edit and remove a printer', async () => {
     fake.server.close();
   }
 });
+
+test('Clear: a finished print is cleared on the printer and shown as ready', async () => {
+  const fake = await fakeMoonraker();
+  Object.assign(fake.p, { state: 'complete', filename: 'cube.gcode', progress: 1, duration: 600 });
+  const hub = await startHub({ printers: [{ id: 'voron', name: 'Voron', type: 'moonraker', host: fake.host }] });
+  const state = async () => (await hub.call('/api/printers')).data[0];
+  try {
+    let s;
+    for (let i = 0; i < 30 && s?.status !== 'completed'; i++) { await sleep(100); s = await state(); }
+    assert.equal(s.status, 'completed');
+    assert.equal(s.job.file, 'cube.gcode');
+
+    let r = await hub.call('/api/printers/voron/clear', { body: {} });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.ok(fake.p.gcode.includes('SDCARD_RESET_FILE'), 'the printer was told');
+    // This fake doesn't reset itself, so this is the hub's own "cleared" view.
+    s = await state();
+    assert.equal(s.status, 'idle');
+    assert.equal(s.job, null);
+    await sleep(500); // still cleared after more polls of the unchanged printer
+    assert.equal((await state()).status, 'idle');
+
+    r = await hub.call('/api/printers/voron/clear', { body: {} });
+    assert.equal(r.status, 400);
+    assert.match(r.data.error, /no finished print/);
+
+    // A new print ends the cleared view.
+    Object.assign(fake.p, { state: 'printing', filename: 'next.gcode', progress: 0.3 });
+    for (let i = 0; i < 30 && s?.status !== 'printing'; i++) { await sleep(100); s = await state(); }
+    assert.equal(s.status, 'printing');
+    assert.equal(s.job.file, 'next.gcode');
+  } finally {
+    hub.stop();
+    fake.server.close();
+  }
+});

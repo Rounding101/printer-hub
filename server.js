@@ -58,7 +58,19 @@ const printers = new Map(); // id -> running driver
 // ---- Live updates (Server-Sent Events) ---------------------------------------
 
 const clients = new Map(); // response -> session id
-const snapshot = () => [...printers.values()].map((p) => p.state);
+// Finished jobs cleared from the hub (Clear): printer id -> file. The printer
+// shows as ready until it reports something else (a new job, or idle itself).
+const cleared = new Map();
+function view(state) {
+  const file = cleared.get(state.id);
+  if (file === undefined) return state;
+  if (state.status !== 'completed' || (state.job?.file || '') !== file) {
+    cleared.delete(state.id);
+    return state;
+  }
+  return { ...state, status: 'idle', job: null };
+}
+const snapshot = () => [...printers.values()].map((p) => view(p.state));
 const broadcast = (event, data) => {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of clients.keys()) res.write(msg);
@@ -85,7 +97,7 @@ function onPrinterUpdate(state) {
   // Printers that don't serve a preview themselves can use the library's copy.
   if (state.job?.file && !state.job.thumb) state.job.thumb = !!library.findByName(state.job.file)?.thumb;
   jobs.observe(state);
-  broadcast('printer', state);
+  broadcast('printer', view(state));
 }
 
 // Drivers start once the server is listening; printers added later start at once.
@@ -429,6 +441,12 @@ const ACTIONS = {
   pause: (p) => p.pause(),
   resume: (p) => p.resume(),
   cancel: (p) => p.cancel(),
+  clear: async (p) => {
+    if (view(p.state).status !== 'completed') throw new Error('There’s no finished print to clear');
+    await p.clear();
+    cleared.set(p.state.id, p.state.job?.file || '');
+    broadcast('printer', view(p.state));
+  },
   light: (p, body) => p.setLight(!!body.on),
   control: (p, body) => p.control(body),
   slots: (p) => (p.refreshSlots ? p.refreshSlots() : p.state.slots),

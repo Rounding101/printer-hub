@@ -75,7 +75,7 @@ test('nothing is recorded without a camera, or with timelapses off', async () =>
 test('printers that report no layers get a frame every interval', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-'));
   try {
-    const tl = new Timelapses(dir, { intervalMs: 50 });
+    const tl = new Timelapses(dir, { intervalMs: 50, graceMs: 0 });
     const driver = new MockDriver({ id: 'm', name: 'Mock' }, {});
     const s = { id: 'm', name: 'Mock', camera: 'mjpeg', status: 'printing', job: { file: 'b.gcode', layer: 0, totalLayers: 0 } };
     for (let i = 0; i < 6; i++) { tl.observe(driver, s); await sleep(60); }
@@ -127,6 +127,23 @@ test('the hub records a simulated print and serves the video with Range', { skip
     assert.equal((await get(`/api/timelapses/${item.id}/poster`)).headers.get('content-type'), 'image/jpeg');
   } finally {
     child.kill();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a blip mid-print does not end the recording', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-'));
+  try {
+    const tl = new Timelapses(dir); // default one-minute grace
+    const driver = new MockDriver({ id: 'm', name: 'Mock' }, {});
+    const s = (status, layer) => ({ id: 'm', name: 'Mock', camera: 'mjpeg', status, job: status === 'printing' ? { file: 'c.gcode', layer, totalLayers: 9 } : null });
+    tl.observe(driver, s('printing', 1));
+    tl.observe(driver, s('error'));
+    tl.observe(driver, s('printing', 2));
+    assert.equal(tl.list().length, 1);
+    assert.equal(tl.list()[0].status, 'recording');
+    assert.equal(tl.active.get('m').stoppedAt, undefined);
+  } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

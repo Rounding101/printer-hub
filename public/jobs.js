@@ -61,6 +61,8 @@ const Jobs = (() => {
       const name = cell(tr, j.item, 'item');
       name.title = j.file;
       if (j.manual) name.insertAdjacentHTML('beforeend', ' <span class="tag">manual</span>');
+      // Why a print that didn't finish ended, as the printer reported it.
+      if (j.endReason) name.append(Object.assign(document.createElement('span'), { className: 'lib-sub job-reason', textContent: j.endReason }));
 
       if (j.outcome === 'printing') {
         const live = cards.get(j.printerId)?.state.job?.progress ?? j.progress ?? 0;

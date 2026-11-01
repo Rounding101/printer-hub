@@ -3,6 +3,20 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.15.1 — 2026-11-01
+
+### Fixed
+- **Finished prints logged as failed or cancelled.** If a printer reported an
+  error or idle for a moment mid-print and then carried on, the job log closed
+  the job and started a second one. It now reopens the same job when the
+  printer resumes the same file at the same progress (within 30 minutes).
+- Printers that report whole percents and go idle at 99% count as finished.
+- A blip like that no longer ends a timelapse recording either.
+
+### Added
+- The job log shows **why** a print ended without finishing, e.g. "Printer
+  reported an error (at 43%)", and writes it to the hub's log.
+
 ## 0.15.0 — 2026-10-31
 
 ### Added

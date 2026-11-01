@@ -69,8 +69,14 @@ RUN sh /tmp/install-missing-libs.sh /opt/orca && rm /tmp/install-missing-libs.sh
 
 # STEP converter plus the OpenCASCADE runtime libraries it links.
 COPY --from=step2stl /out/ /opt/step2stl/
-RUN apt-get -o Acquire::Retries=5 update \
-    && xargs apt-get -o Acquire::Retries=5 install -y --no-install-recommends < /opt/step2stl/packages \
+# Retried as a whole: Ubuntu's mirrors briefly serve mismatched indexes while
+# they sync ("File has unexpected size"), which per-file retries don't fix.
+RUN for i in 1 2 3 4; do \
+         apt-get -o Acquire::Retries=5 update \
+         && xargs apt-get -o Acquire::Retries=5 install -y --no-install-recommends < /opt/step2stl/packages \
+         && break; \
+         [ "$i" = 4 ] && exit 100; echo "apt attempt $i failed, retrying"; rm -rf /var/lib/apt/lists/*; sleep 30; \
+       done \
     && rm -rf /var/lib/apt/lists/* \
     && /opt/step2stl/step2stl /opt/step2stl/test.step /tmp/test.stl && rm /tmp/test.stl
 

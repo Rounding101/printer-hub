@@ -168,3 +168,32 @@ test('Clear: a finished print is cleared on the printer and shown as ready', asy
     fake.server.close();
   }
 });
+
+test('Camera crop: saved alone, shown in live state, admins only', async () => {
+  const fake = await fakeMoonraker({ apiKey: 'k' });
+  const hub = await startHub({ printers: [{ id: 'voron', name: 'Voron', type: 'moonraker', host: fake.host, apiKey: 'k' }] });
+  const state = async () => (await hub.call('/api/printers')).data[0];
+  try {
+    for (let i = 0; i < 30 && !(await state())?.online; i++) await sleep(100);
+    let r = await hub.call('/api/printer-setup/voron', { method: 'PATCH', body: { cameraCrop: { x: 0.2, y: 0.3, w: 0.5, h: 0.4 } } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.deepEqual(r.data.cameraCrop, { x: 0.2, y: 0.3, w: 0.5, h: 0.4 });
+    assert.equal(r.data.host, fake.host, 'other settings kept');
+    assert.equal(r.data.apiKeySet, true);
+    const s = await state();
+    assert.deepEqual(s.cameraCrop, { x: 0.2, y: 0.3, w: 0.5, h: 0.4 });
+    assert.equal(s.online, true, 'still connected (no restart for a crop)');
+
+    r = await hub.call('/api/printer-setup/voron', { method: 'PATCH', body: { cameraCrop: null } });
+    assert.equal(r.data.cameraCrop, undefined);
+    assert.equal((await state()).cameraCrop, null);
+
+    await hub.call('/api/users', { body: { username: 'oper', password: 'operator-pass', role: 'operator' } });
+    const op = (await hub.call('/api/auth/login', { body: { username: 'oper', password: 'operator-pass' }, as: '' })).cookie;
+    r = await hub.call('/api/printer-setup/voron', { method: 'PATCH', body: { cameraCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } }, as: op });
+    assert.equal(r.status, 403);
+  } finally {
+    hub.stop();
+    fake.server.close();
+  }
+});

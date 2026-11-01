@@ -51,6 +51,16 @@
         <div class="cam ctl-cam">
           <div class="cam-empty">No camera</div>
           <button class="cam-full" type="button" title="Fullscreen" aria-label="Fullscreen camera">⤢</button>
+          <button class="cam-crop" type="button" id="ctl-crop" title="Show only part of the camera image, e.g. the build plate">Crop</button>
+          <div class="crop-editor" id="ctl-crop-editor" hidden>
+            <div class="crop-box" id="ctl-crop-box" hidden></div>
+            <div class="crop-bar">
+              <span class="crop-hint">Drag over the image to choose what to show</span>
+              <button class="btn small ghost" type="button" id="ctl-crop-reset">Full frame</button>
+              <button class="btn small ghost" type="button" id="ctl-crop-cancel">Cancel</button>
+              <button class="btn small primary" type="button" id="ctl-crop-save">Save</button>
+            </div>
+          </div>
         </div>
       </div>
       <aside class="panel ctl-status">

@@ -11,7 +11,11 @@ that printer:
 
 - **Files:** upload only, or upload & print (models go to the slicer).
   Browse printer files.
-- **Camera** at full size.
+- **Camera** at full size, with a fullscreen button.
+- **Crop** (admins; hover over the camera): show only part of the camera
+  image, e.g. just the build plate. Drag a box over the full frame and
+  **Save**; **Full frame** removes the crop. The crop is applied in the
+  browser, on every card and view, and saved with the printer's settings.
 - **Status:** progress, layer, time remaining, and the clock time it will
   finish. Pause, resume, cancel, light, and motors off.
 - **Clear:** after a print finishes, the printer shows **Done** until you take

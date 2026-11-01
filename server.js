@@ -107,6 +107,7 @@ function attach(cfg) {
   if (!Driver) { console.warn(`Skipping ${cfg.id}: unknown type "${cfg.type}"`); return; }
   let driver;
   try { driver = new Driver(cfg, { pollIntervalMs: config.pollIntervalMs }); } catch (err) { console.warn(`Skipping ${cfg.id}: ${err.message}`); return; }
+  driver.state.cameraCrop = cfg.cameraCrop || null; // applied by the browser
   driver.on('update', onPrinterUpdate);
   printers.set(cfg.id, driver);
   if (started) driver.start();
@@ -145,7 +146,21 @@ async function testPrinter(cfg) {
 }
 
 for (const cfg of printerStore.all()) attach(cfg);
-printerStore.on('change', async ({ added, updated, removed }) => {
+// True when two printer configs differ only in their camera crop.
+const onlyCropChanged = (a, b) => {
+  const strip = ({ cameraCrop, ...rest }) => JSON.stringify(rest);
+  return !!a && !!b && strip(a) === strip(b);
+};
+
+printerStore.on('change', async ({ added, updated, removed, previous }) => {
+  // A new crop doesn't need a reconnect: update the running printer in place.
+  const running = updated && printers.get(updated.id);
+  if (running && onlyCropChanged(updated, previous)) {
+    running.cfg = updated;
+    running.state.cameraCrop = updated.cameraCrop || null;
+    broadcast('printer', view(running.state));
+    return;
+  }
   if (removed || updated) await detach(removed || updated.id);
   if (added || updated) attach(added || updated);
   broadcast('printers', snapshot());

@@ -60,6 +60,36 @@ function stopMedia(el) {
   el.remove();
 }
 
+// ---- Camera crop: show only part of the frame (set per printer in the control
+// panel). The image is scaled and shifted so the crop fills the box.
+const cropObserver = new ResizeObserver((entries) => entries.forEach((e) => layoutCrop(e.target)));
+
+function setCrop(cam, crop) {
+  const key = crop ? [crop.x, crop.y, crop.w, crop.h].join(',') : '';
+  if (cam.dataset.crop === key) return;
+  cam.dataset.crop = key;
+  cam.crop = crop || null;
+  cam.classList.toggle('cropped', !!crop);
+  if (crop) cropObserver.observe(cam); else cropObserver.unobserve(cam);
+  layoutCrop(cam);
+}
+
+function layoutCrop(cam) {
+  const media = cam.querySelector(':scope > img, :scope > video');
+  if (!media) return;
+  const crop = cam.crop;
+  const sw = media.naturalWidth || media.videoWidth, sh = media.naturalHeight || media.videoHeight;
+  if (!crop || !sw || !sh) { media.removeAttribute('style'); return; }
+  const cw = cam.clientWidth, ch = cam.clientHeight;
+  const k = Math.min(cw / (crop.w * sw), ch / (crop.h * sh));
+  Object.assign(media.style, {
+    position: 'absolute', maxWidth: 'none', objectFit: 'fill',
+    width: `${sw * k}px`, height: `${sh * k}px`,
+    left: `${(cw - crop.w * sw * k) / 2 - crop.x * sw * k}px`,
+    top: `${(ch - crop.h * sh * k) / 2 - crop.y * sh * k}px`,
+  });
+}
+
 function mountCamera(card) {
   const { el, state } = card;
   const cam = el.querySelector('.cam');
@@ -75,7 +105,7 @@ function mountCamera(card) {
   if (state.camera === 'mjpeg') {
     const img = new Image();
     img.alt = `${state.name} camera`;
-    img.onload = () => cam.classList.add('has-feed');
+    img.onload = () => { cam.classList.add('has-feed'); layoutCrop(cam); };
     img.onerror = () => fallbackSnapshots(card);
     img.src = src;
     cam.prepend(img);
@@ -87,6 +117,7 @@ function mountCamera(card) {
     player.attachMediaElement(video);
     player.on(mpegts.Events.ERROR, () => fallbackSnapshots(card));
     video.addEventListener('playing', () => cam.classList.add('has-feed'), { once: true });
+    video.addEventListener('loadedmetadata', () => layoutCrop(cam));
     player.load();
     video.play().catch(() => {});
     card.player = { destroy: () => { player.destroy(); } };
@@ -101,7 +132,7 @@ function fallbackSnapshots(card) {
   cam.classList.remove('has-feed');
   const img = new Image();
   img.alt = `${card.state.name} camera snapshot`;
-  img.onload = () => cam.classList.add('has-feed');
+  img.onload = () => { cam.classList.add('has-feed'); layoutCrop(cam); };
   cam.prepend(img);
   const base = `/api/printers/${encodeURIComponent(card.state.id)}/snapshot`;
   let failures = 0;
@@ -208,6 +239,7 @@ function render(state) {
   q('.act-light').tabIndex = document.body.dataset.role === 'viewer' ? -1 : 0; // shown, not switchable
   q('.act-light').title = state.light ? 'Light is on. Click to turn it off.' : 'Light is off. Click to turn it on.';
 
+  setCrop(q('.cam'), state.cameraCrop);
   // The dashboard and control view each hold a camera stream; only run the visible one.
   if (document.querySelector('.view[data-view="control"]').hidden) mountCamera(card);
   else { card.player?.destroy(); card.player = null; card.camKind = undefined; card.el.querySelectorAll('.cam img, .cam video').forEach(stopMedia); }

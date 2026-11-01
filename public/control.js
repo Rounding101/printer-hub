@@ -1,5 +1,5 @@
 // Per-printer control view (#control/<id>): camera, status, jog, temperatures,
-// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), prepLine(), setThumb(), cards,
+// fans, speed and filament slots. Uses api(), toast(), dur(), deg(), prepLine(), setThumb(), setCrop(), cards,
 // mountCamera(), confirmCancel() and STATUS_LABEL from app.js.
 const Control = (() => {
   const $ = (id) => document.getElementById(id);
@@ -10,6 +10,7 @@ const Control = (() => {
   let printerId = null;
   let step = 10;
   let uploadMode = 'upload';
+  let cropping = null; // crop being drawn: { x, y, w, h } as fractions of the frame
   const editing = new Set(); // inputs the user is touching; don't overwrite them from live updates
 
   const BUSY = ['preparing', 'printing', 'pausing', 'paused', 'heating', 'cancelling', 'busy'];
@@ -110,6 +111,84 @@ const Control = (() => {
     renderSpeed(state, force);
     renderSlots(state);
     mountCamera(view);
+    if (!cropping) setCrop(root.querySelector('.ctl-cam'), state.cameraCrop);
+  }
+
+  // ---- Camera crop editor (admins) ---------------------------------------------
+  // Shows the whole frame; drag a box over it to pick what every view shows.
+
+  function frameRect() {
+    const cam = root.querySelector('.ctl-cam');
+    const media = cam.querySelector(':scope > img, :scope > video');
+    const sw = media?.naturalWidth || media?.videoWidth, sh = media?.naturalHeight || media?.videoHeight;
+    if (!sw || !sh) return null;
+    const k = Math.min(cam.clientWidth / sw, cam.clientHeight / sh);
+    return { x: (cam.clientWidth - sw * k) / 2, y: (cam.clientHeight - sh * k) / 2, w: sw * k, h: sh * k };
+  }
+
+  function drawCropBox() {
+    const box = $('ctl-crop-box');
+    const r = frameRect();
+    box.hidden = !cropping || !r;
+    if (box.hidden) return;
+    Object.assign(box.style, {
+      left: `${r.x + cropping.x * r.w}px`, top: `${r.y + cropping.y * r.h}px`,
+      width: `${cropping.w * r.w}px`, height: `${cropping.h * r.h}px`,
+    });
+  }
+
+  function endCrop() {
+    cropping = null;
+    $('ctl-crop-editor').hidden = true;
+    root.querySelector('.ctl-cam').classList.remove('editing-crop');
+    setCrop(root.querySelector('.ctl-cam'), view.state?.cameraCrop);
+  }
+
+  async function saveCrop(crop) {
+    try {
+      await api(`/api/printer-setup/${enc(printerId)}`, { method: 'PATCH', body: { cameraCrop: crop } });
+      toast(crop ? 'Camera crop saved' : 'Showing the full camera frame');
+      view.state.cameraCrop = crop; // the live update follows
+      endCrop();
+    } catch (err) { toast(err.message, true); }
+  }
+
+  function initCrop() {
+    const cam = root.querySelector('.ctl-cam');
+    const editor = $('ctl-crop-editor');
+    $('ctl-crop').addEventListener('click', () => {
+      if (!frameRect()) { toast('Wait for the camera picture first', true); return; }
+      cropping = view.state?.cameraCrop ? { ...view.state.cameraCrop } : { x: 0, y: 0, w: 1, h: 1 };
+      setCrop(cam, null); // show the whole frame while choosing
+      cam.classList.add('editing-crop');
+      editor.hidden = false;
+      requestAnimationFrame(drawCropBox);
+    });
+    $('ctl-crop-cancel').addEventListener('click', endCrop);
+    $('ctl-crop-reset').addEventListener('click', () => saveCrop(null));
+    $('ctl-crop-save').addEventListener('click', () => saveCrop(cropping));
+
+    let start = null;
+    const at = (e) => {
+      const r = frameRect(), b = cam.getBoundingClientRect();
+      const clamp = (v) => Math.min(1, Math.max(0, v));
+      return { x: clamp((e.clientX - b.left - r.x) / r.w), y: clamp((e.clientY - b.top - r.y) / r.h) };
+    };
+    editor.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.crop-bar') || !frameRect()) return;
+      start = at(e);
+      editor.setPointerCapture(e.pointerId);
+    });
+    editor.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      const p = at(e);
+      cropping = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+      drawCropBox();
+    });
+    editor.addEventListener('pointerup', () => {
+      start = null;
+      if (cropping && (cropping.w < 0.05 || cropping.h < 0.05)) { cropping = { x: 0, y: 0, w: 1, h: 1 }; drawCropBox(); }
+    });
   }
 
   function heaterRow(key, label, t, max) {
@@ -364,6 +443,7 @@ const Control = (() => {
     $('ctl-browse').addEventListener('click', () => Files.openPrinterFiles(printerId));
 
     root.querySelector('.ctl-cam .cam-full').addEventListener('click', () => root.querySelector('.ctl-cam').requestFullscreen?.());
+    initCrop();
 
     const act = (name, fn) => root.querySelector(`[data-act="${name}"]`).addEventListener('click', fn);
     const simple = (path) => async () => {

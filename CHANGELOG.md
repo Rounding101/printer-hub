@@ -3,6 +3,15 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.14.0 — 2026-10-31
+
+### Added
+- **Camera crop.** Admins can crop each printer's camera to the part that
+  matters, such as the build plate: hover over the camera in the control
+  panel, click **Crop**, drag a box and save. Every card and view shows the
+  crop; **Full frame** removes it. Saving a crop doesn't reconnect the
+  printer.
+
 ## 0.13.0 — 2026-10-31
 
 ### Added

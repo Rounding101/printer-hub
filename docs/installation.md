@@ -25,7 +25,8 @@ Setting up with an AI coding agent? Point it at [AGENTS.md](../AGENTS.md).
 - **Docker** with the Compose plugin
   ([install guide](https://docs.docker.com/engine/install/)). Check with
   `docker compose version`.
-- About **3 GB** of free disk space (the slicer image is the big one) and 1 GB
+- About **5 GB** of free disk space (the images take 1.6 GB, the rest is for your
+  print files and timelapses) and 1 GB
   of RAM.
 - The machine must be able to reach your printers' IP addresses. Give each
   printer a fixed address (a DHCP reservation in your router).
@@ -91,7 +92,8 @@ docker compose up -d --build
 ```
 
 This uses the root [`compose.yaml`](../compose.yaml). The first build takes
-10–15 minutes and needs about 10 GB of free disk space. To update,
+about 3 minutes on a fast machine, and longer on a small one. It needs about
+5 GB of free disk space. To update,
 `git pull && docker compose up -d --build`. Settings go in a `.env` file in the
 same folder, as in Option 2, except `HUB_VERSION`.
 
@@ -115,7 +117,7 @@ Create a **stack** (or "compose project") and paste the contents of
 
 To build from source instead (e.g. to run unreleased changes), point a Git
 stack at this repository and its root [`compose.yaml`](../compose.yaml). The
-first build takes 10–15 minutes. Its volume name starts with the stack's name,
+first build takes about 3 minutes on a fast machine. Its volume name starts with the stack's name,
 so the backup commands below work on it unchanged, but `docker volume rm` needs
 the name from `docker volume ls`.
 

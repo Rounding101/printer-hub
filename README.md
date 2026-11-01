@@ -84,7 +84,7 @@ docker compose up -d --build
 docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
 ```
 
-The first build takes 10–15 minutes and needs about 10 GB of free disk space.
+The first build takes about 3 minutes on a fast machine, and longer on a small one.
 </details>
 
 <details>

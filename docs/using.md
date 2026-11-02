@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md)
 
-A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing), [timelapses](#timelapses) and the [job log](#job-log-and-totals).
+A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing), [timelapses](#timelapses) and the [job log](#job-log).
 
 ## Control panel
 

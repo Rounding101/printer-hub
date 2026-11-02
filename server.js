@@ -10,7 +10,7 @@ const { OctoPrintDriver } = require('./drivers/octoprint');
 const { PrusaLinkDriver } = require('./drivers/prusalink');
 const { PrinterStore } = require('./lib/printers');
 const { Timelapses } = require('./lib/timelapse');
-const { JobLog } = require('./lib/jobs');
+const { JobLog, planFilamentUse } = require('./lib/jobs');
 const { Library } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
 const { SpoolStore } = require('./lib/spools');
@@ -183,7 +183,7 @@ spools.on('change', () => broadcast('spools', spools.list()));
 // Works out how many grams a new job will take from each slot, best source first:
 // 1. what the hub knew when it started the print (file colors + chosen slots),
 // 2. the file's per-color weights as the printer reports them (slots guessed),
-// 3. the file's total weight (library or printer estimate) on a single-slot printer.
+// 3. the file's total weight (library or printer estimate), when it reports no per-color weights.
 const planning = new Set();
 async function planFilament(job, phase) {
   const key = `${job.id}:${phase}`;
@@ -192,19 +192,15 @@ async function planFilament(job, phase) {
   const p = printers.get(job.printerId);
   if (!p) return;
   const multi = !!p.state.slots?.length;
-  let plan = null;
+  let colors = null;
   const ls = p.hubStart;
-  if (ls && ls.file === job.file && Date.now() - ls.at < 30 * 60 * 1000 && ls.perSlot?.length) plan = ls.perSlot;
-  if (!plan && multi) {
+  if (ls && ls.file === job.file && Date.now() - ls.at < 30 * 60 * 1000 && ls.perSlot?.length) colors = ls.perSlot;
+  if (!colors && multi) {
     try {
-      const o = await p.printOptions(job.file);
-      if (o.colors?.some((c) => c.grams > 0)) plan = o.colors.map((c) => ({ slot: c.slot, grams: c.grams || 0 }));
+      colors = (await p.printOptions(job.file)).colors;
     } catch { /* file details unavailable */ }
   }
-  if (!plan) {
-    const g = library.findByName(job.file)?.grams ?? p.state.job?.grams;
-    if (g) plan = [{ slot: multi ? null : 0, grams: g }];
-  }
+  const plan = planFilamentUse(colors, library.findByName(job.file)?.grams ?? p.state.job?.grams, multi);
   if (plan) jobs.setFilamentPlan(job.id, plan);
 }
 library.on('change', () => broadcast('library', libraryView()));
@@ -503,9 +499,7 @@ const ACTIONS = {
     return (async () => {
       // Remember grams per slot for this start so the job can charge the right rolls.
       const opts = await p.printOptions(String(body.file)).catch(() => null);
-      const perSlot = opts?.colors?.some((c) => c.grams > 0)
-        ? opts.colors.map((c) => ({ slot: body.mapping?.[c.index] != null ? Number(body.mapping[c.index]) : c.slot, grams: c.grams || 0 }))
-        : null;
+      const perSlot = opts?.colors?.map((c) => ({ slot: body.mapping?.[c.index] != null ? Number(body.mapping[c.index]) : c.slot, grams: c.grams || 0 })) ?? null;
       p.hubStart = { file: String(body.file), at: Date.now(), perSlot };
       return p.startPrint(String(body.file), { mapping: body.mapping, autoLevel: body.autoLevel });
     })();

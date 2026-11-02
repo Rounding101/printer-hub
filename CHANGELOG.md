@@ -3,6 +3,14 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.16.1 — 2026-11-01
+
+### Fixed
+- **Filament rolls now go down after prints the hub sliced.** The Kobra X reports
+  0 g for these files, so the job log showed the weight but charged it to no
+  slot. It now goes to the slot the print used. Prints that finished before this
+  update aren't charged: use **Adjust** to correct a roll once.
+
 ## 0.16.0 — 2026-11-01
 
 ### Changed

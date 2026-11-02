@@ -4,7 +4,8 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { JobLog } = require('../lib/jobs');
+const { JobLog, planFilamentUse } = require('../lib/jobs');
+const { SpoolStore } = require('../lib/spools');
 
 function setup() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-'));
@@ -95,4 +96,32 @@ test('correcting an outcome by hand clears the reason', () => {
     assert.equal(log.list()[0].outcome, 'completed');
     assert.equal(log.list()[0].endReason, undefined);
   } finally { done(); }
+});
+
+test('a file with no per-color weights charges its total to the slot it printed from', () => {
+  // What a Kobra X reports for a hub-sliced file: one color, 0 g. The library knows the total.
+  const plan = planFilamentUse([{ slot: 3, grams: 0 }], 81, true);
+  assert.deepEqual(plan, [{ slot: 3, grams: 81 }]);
+
+  const { log, see, done } = setup();
+  try {
+    const spools = new SpoolStore(log.dir, log);
+    const roll = spools.install({ printerId: 'k', slot: 3, remainingGrams: 600 });
+    see('printing', 50, { elapsed: 0 });
+    log.setFilamentPlan(log.list()[0].id, plan);
+    see('completed', 100, { elapsed: 0 });
+    const after = spools.list().find((s) => s.id === roll.id);
+    assert.equal(after.usedGrams, 81);
+    assert.equal(after.remainingGrams, 519);
+  } finally { done(); }
+});
+
+test('filament plans: known weights win, and an unknown split stays unassigned', () => {
+  assert.deepEqual(planFilamentUse([{ slot: 0, grams: 5 }, { slot: 2, grams: 1 }], 99, true), [{ slot: 0, grams: 5 }, { slot: 2, grams: 1 }]);
+  // Two colors on one slot are still one slot.
+  assert.deepEqual(planFilamentUse([{ slot: 1, grams: 0 }, { slot: 1, grams: 0 }], 40, true), [{ slot: 1, grams: 40 }]);
+  assert.deepEqual(planFilamentUse([{ slot: 0, grams: 0 }, { slot: 1, grams: 0 }], 40, true), [{ slot: null, grams: 40 }]);
+  assert.deepEqual(planFilamentUse(null, 40, true), [{ slot: null, grams: 40 }]);
+  assert.deepEqual(planFilamentUse(null, 40, false), [{ slot: 0, grams: 40 }]);
+  assert.equal(planFilamentUse([{ slot: 1, grams: 0 }], 0, true), null);
 });

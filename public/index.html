@@ -401,10 +401,21 @@
     <form method="dialog" class="dlg form">
       <h3>Slice <span class="sd-model"></span></h3>
       <div class="sd-fields">
-        <label>Printer <select name="printerId"></select></label>
-        <label>Quality <select name="process"></select></label>
-        <label>Filament <select name="filament"></select></label>
-        <label>Build plate <select name="bedType"></select></label>
+        <div class="seg seg-full" role="tablist" aria-label="Slice settings">
+          <button type="button" role="tab" data-sd-tab="basics" aria-selected="true">Basics</button>
+          <button type="button" role="tab" data-sd-tab="strength" aria-selected="false">Strength <span class="count"></span></button>
+          <button type="button" role="tab" data-sd-tab="surface" aria-selected="false">Surface <span class="count"></span></button>
+          <button type="button" role="tab" data-sd-tab="support" aria-selected="false">Support <span class="count"></span></button>
+        </div>
+        <div class="sd-panel" data-sd-panel="basics">
+        <div class="form-row">
+          <label>Printer <select name="printerId"></select></label>
+          <label>Quality <select name="process"></select></label>
+        </div>
+        <div class="form-row">
+          <label>Filament <select name="filament"></select></label>
+          <label>Build plate <select name="bedType"></select></label>
+        </div>
         <div class="form-row">
           <label>Copies on the plate <input name="copies" type="number" min="1" max="64" value="1"></label>
           <label>Infill <span class="sd-infill-val"></span><input name="infill" type="range" min="0" max="100" step="5" value="15"></label>
@@ -421,9 +432,79 @@
         </div>
         <label class="check"><input type="checkbox" name="brim"> Brim</label>
         <label class="check"><input type="checkbox" name="orient"> Auto-orient the model</label>
+        <p class="dlg-hint sd-vase-note" hidden>Vase mode is on, so copies, infill, walls and supports don't apply. Turn it off under Surface.</p>
+        </div>
+        <div class="sd-panel" data-sd-panel="strength" hidden>
+          <p class="dlg-hint">Blank or "From the preset" uses what the Quality preset says.</p>
+          <label>Infill pattern
+            <select name="infillPattern">
+              <option value="">From the preset</option>
+              <option value="grid">Grid: fast, general use</option>
+              <option value="gyroid">Gyroid: strong in every direction</option>
+              <option value="cubic">Cubic: strong, quick to print</option>
+              <option value="adaptivecubic">Adaptive cubic: saves filament</option>
+              <option value="honeycomb">Honeycomb: strong, slow</option>
+              <option value="triangles">Triangles: stiff</option>
+              <option value="lightning">Lightning: only holds up the top, not strong</option>
+              <option value="rectilinear">Rectilinear: simple lines</option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label>Top layers <input name="topLayers" type="number" min="0" max="30" placeholder="Preset"></label>
+            <label>Bottom layers <input name="bottomLayers" type="number" min="0" max="30" placeholder="Preset"></label>
+          </div>
+        </div>
+        <div class="sd-panel" data-sd-panel="surface" hidden>
+          <label>Seam
+            <select name="seam">
+              <option value="">From the preset</option>
+              <option value="aligned">Aligned: a straight line, easy to hide</option>
+              <option value="nearest">Nearest: fastest</option>
+              <option value="back">Back: at the back of the part</option>
+              <option value="random">Random: scattered, no visible line</option>
+            </select>
+          </label>
+          <label>Ironing
+            <select name="ironing">
+              <option value="">From the preset</option>
+              <option value="no ironing">Off</option>
+              <option value="topmost">Topmost surface: smooth top, adds time</option>
+              <option value="top">All top surfaces: adds more time</option>
+              <option value="solid">All solid layers: slowest</option>
+            </select>
+          </label>
+          <label>Fuzzy skin
+            <select name="fuzzySkin">
+              <option value="">From the preset</option>
+              <option value="none">Off</option>
+              <option value="external">Outer walls: a textured finish</option>
+              <option value="allwalls">All walls</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" name="vase"> Vase mode: one continuous spiral wall, open top</label>
+          <p class="dlg-hint">Vase mode needs one solid part and one copy. It's off again next time.</p>
+        </div>
+        <div class="sd-panel" data-sd-panel="support" hidden>
+          <p class="dlg-hint">Turn supports and the brim on under Basics.</p>
+          <div class="form-row">
+            <label>Support overhangs steeper than (°) <input name="supportAngle" type="number" min="0" max="90" placeholder="Preset"></label>
+            <label>Supports start from
+              <select name="supportWhere">
+                <option value="">From the preset</option>
+                <option value="any">Anywhere</option>
+                <option value="plate">Build plate only</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Brim width (mm) <input name="brimWidth" type="number" min="1" max="30" placeholder="Preset"></label>
+            <label>Skirt loops <input name="skirtLoops" type="number" min="0" max="10" placeholder="Preset"></label>
+          </div>
+        </div>
       </div>
       <div class="sd-status" hidden></div>
       <div class="dlg-actions">
+        <button class="btn ghost sd-reset grow-left" type="button" hidden>Reset to preset</button>
         <button class="btn ghost sd-close" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary sd-go" type="button">Slice</button>
       </div>

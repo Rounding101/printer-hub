@@ -38,6 +38,26 @@ function cubeStl(size = 20) {
     console.log(`selftest ok: ${t.machine} -> ${r.stats.layers} layers, ${r.stats.grams} g, ${r.stats.time}, bed ${r.stats.bedTemp} °C (${r.stats.bedType})`);
   }
 
+  // Settings from the slice dialog reach the G-code.
+  const opt = TARGETS[0];
+  const base = {
+    input, ...opt,
+    process: store.compatible(opt.vendor, 'process', opt.machine).find((n) => /^0\.20mm Standard/.test(n)),
+    filament: store.compatible(opt.vendor, 'filament', opt.machine).find((n) => /\bPLA\b/.test(n)),
+  };
+  const checks = [
+    [{ infillPattern: 'gyroid', topLayers: 6, seam: 'back', ironing: 'top', fuzzySkin: 'external', skirtLoops: 2 },
+      { sparse_infill_pattern: 'gyroid', top_shell_layers: '6', seam_position: 'back', ironing_type: 'top', fuzzy_skin: 'external', skirt_loops: '2' }],
+    [{ vase: true, infill: 40, walls: 4 }, { spiral_mode: '1', wall_loops: '1', top_shell_layers: '0' }],
+  ];
+  for (const [options, want] of checks) {
+    const g = fs.readFileSync((await slice({ ...base, options })).output, 'latin1');
+    for (const [k, v] of Object.entries(want)) {
+      if (!new RegExp(`^; ${k} = ${v}\\s*$`, 'm').test(g)) throw new Error(`${k} is not ${v} in the G-code`);
+    }
+  }
+  console.log('selftest ok: slice settings reach the G-code');
+
   // STEP goes through the OpenCASCADE converter. The test part is 12 mm tall,
   // so ~60 layers at 0.2 mm proves the units came through as millimetres.
   const step = path.join(dataDir, 'selftest', 'part.step');

@@ -3,6 +3,16 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.18.0 — 2026-11-02
+
+### Added
+- **More slicer settings,** on tabs in the Slice dialog. Anything left blank uses
+  the Quality preset.
+  - **Strength:** infill pattern, top and bottom layers.
+  - **Surface:** seam position, ironing, fuzzy skin and vase mode.
+  - **Support:** overhang angle, supports from the build plate only, brim width
+    and skirt loops.
+
 ## 0.17.1 — 2026-11-01
 
 ### Changed

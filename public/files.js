@@ -622,6 +622,47 @@ const Files = (() => {
     f.walls.value = lastSlice.walls || 2;
     f.brim.checked = !!lastSlice.brim;
     f.orient.checked = !!lastSlice.orient;
+
+    // The settings beyond Basics. Blank uses the preset. Vase mode isn't
+    // remembered: it changes the whole print, so it's chosen each time.
+    const MORE = { strength: ['infillPattern', 'topLayers', 'bottomLayers'], surface: ['seam', 'ironing', 'fuzzySkin'], support: ['supportAngle', 'supportWhere', 'brimWidth', 'skirtLoops'] };
+    for (const key of Object.values(MORE).flat()) f[key].value = lastSlice.more?.[key] ?? '';
+    f.vase.checked = false;
+    const tabs = [...dlg.querySelectorAll('[data-sd-tab]')];
+    const showTab = (name) => {
+      tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.sdTab === name)));
+      dlg.querySelectorAll('[data-sd-panel]').forEach((p) => { p.hidden = p.dataset.sdPanel !== name; });
+    };
+    tabs.forEach((t) => { t.onclick = () => showTab(t.dataset.sdTab); });
+    showTab('basics');
+    const reset = dlg.querySelector('.sd-reset');
+    const VASE_OFF = ['copies', 'infill', 'walls', 'supports', 'topLayers', 'ironing', 'supportAngle', 'supportWhere'];
+    // Shows what's changed on each tab, and turns off what doesn't apply.
+    const syncMore = () => {
+      for (const t of tabs) {
+        const count = t.querySelector('.count');
+        if (!count) continue;
+        const n = MORE[t.dataset.sdTab].filter((key) => f[key].value !== '').length + (t.dataset.sdTab === 'surface' && f.vase.checked ? 1 : 0);
+        count.textContent = n || '';
+      }
+      const vase = f.vase.checked;
+      for (const key of VASE_OFF) f[key].disabled = vase;
+      if (!vase) {
+        f.supportAngle.disabled = f.supports.value === 'off';
+        f.supportWhere.disabled = f.supports.value === 'off';
+      }
+      f.brimWidth.disabled = !f.brim.checked;
+      dlg.querySelector('.sd-vase-note').hidden = !vase;
+      reset.hidden = !Object.values(MORE).flat().some((key) => f[key].value !== '') && !vase;
+    };
+    f.oninput = syncMore;
+    f.onchange = syncMore;
+    reset.onclick = () => {
+      for (const key of Object.values(MORE).flat()) f[key].value = '';
+      f.vase.checked = false;
+      syncMore();
+    };
+    syncMore();
     const infillLabel = () => { dlg.querySelector('.sd-infill-val').textContent = `${f.infill.value}%`; };
     f.infill.oninput = infillLabel;
     infillLabel();
@@ -658,11 +699,28 @@ const Files = (() => {
         process: f.process.value,
         filament: f.filament.value,
         bedType: f.bedType.value || undefined,
-        copies: Number(f.copies.value) || 1,
+        copies: f.vase.checked ? 1 : Number(f.copies.value) || 1,
         orient: f.orient.checked,
-        options: { infill: Number(f.infill.value), supports: f.supports.value, brim: f.brim.checked, walls: Number(f.walls.value) || 2 },
+        options: {
+          infill: Number(f.infill.value),
+          supports: f.supports.value,
+          brim: f.brim.checked,
+          walls: Number(f.walls.value) || 2,
+          infillPattern: f.infillPattern.value,
+          topLayers: f.topLayers.value,
+          bottomLayers: f.bottomLayers.value,
+          seam: f.seam.value,
+          ironing: f.ironing.value,
+          fuzzySkin: f.fuzzySkin.value,
+          supportAngle: f.supportAngle.value,
+          ...(f.supportWhere.value ? { supportBuildPlateOnly: f.supportWhere.value === 'plate' } : {}),
+          brimWidth: f.brimWidth.value,
+          skirtLoops: f.skirtLoops.value,
+          vase: f.vase.checked,
+        },
       };
-      Object.assign(lastSlice, { printerId, copies: body.copies, infill: body.options.infill, supports: body.options.supports, brim: body.options.brim, walls: body.options.walls, orient: body.orient });
+      Object.assign(lastSlice, { printerId, copies: Number(f.copies.value) || 1, infill: body.options.infill, supports: body.options.supports, brim: body.options.brim, walls: body.options.walls, orient: body.orient });
+      lastSlice.more = Object.fromEntries(Object.values(MORE).flat().map((key) => [key, f[key].value]));
       lastSlice.byPrinter = { ...(lastSlice.byPrinter || {}), [printerId]: { process: body.process, filament: body.filament, bedType: body.bedType } };
       try { localStorage.setItem('lastSlice', JSON.stringify(lastSlice)); } catch { /* storage unavailable */ }
 
@@ -670,10 +728,12 @@ const Files = (() => {
       go.textContent = 'Slicing…';
       status.hidden = false;
       status.className = 'sd-status';
+      showTab('basics');
       status.textContent = `Slicing ${body.copies > 1 ? `${body.copies} copies ` : ''}for ${printerName(printerId)}. Large models can take a few minutes.`;
       try {
         const item = await api(`/api/library/${enc(model.id)}/slice`, { body });
         dlg.querySelector('.sd-fields').hidden = true;
+        reset.hidden = true;
         status.className = 'sd-status ok';
         status.replaceChildren(
           Object.assign(document.createElement('strong'), { textContent: 'Sliced' }),

@@ -611,3 +611,14 @@ dialog.video-dlg video { width: 100%; max-height: 70vh; background: #000; border
 @media (max-width: 820px) {
   .lib-folder-tools { display: flex; position: static; background: none; justify-content: flex-end; }
 }
+
+/* Slice dialog tabs: the same height on each, so the buttons stay put */
+#slice-dlg .seg-full { margin-bottom: 4px; }
+.sd-fields { display: flex; flex-direction: column; gap: 12px; }
+.sd-panel { display: flex; flex-direction: column; gap: 12px; }
+#slice-dlg .sd-panel { min-height: 372px; }
+#slice-dlg :is(input, select):disabled { opacity: 0.5; }
+.dlg-actions .grow-left { margin-right: auto; }
+@media (max-width: 600px) {
+  #slice-dlg .sd-panel { min-height: 0; }
+}

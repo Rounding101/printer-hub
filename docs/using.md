@@ -114,9 +114,18 @@ printer must be idle to receive files.
   - STEP files are meshed to STL first with OpenCASCADE (`slicer/step2stl.cpp`,
     same tolerances as Orca's desktop app), since Orca's CLI can't read STEP.
 
-  You can set copies on the plate (they're auto-arranged), infill, supports
-  (off, normal or tree), walls, brim and auto-orient. The dialog remembers your
-  last choices for each printer.
+  **Basics** has copies on the plate (they're auto-arranged), infill, walls,
+  supports (off, normal or tree), brim and auto-orient. More settings are on
+  their own tabs, and a number on a tab shows how many you've changed. Anything
+  left blank uses what the Quality preset says, and **Reset to preset** clears
+  them all:
+  - **Strength:** infill pattern, top and bottom layers.
+  - **Surface:** seam position, ironing, fuzzy skin and vase mode. Vase mode
+    needs one solid part and one copy, and it's off again next time.
+  - **Support:** the overhang angle that gets supports, whether supports can
+    start on the model or only from the build plate, brim width and skirt loops.
+
+  The dialog remembers your last choices, except vase mode.
 - The result lands in Print files, linked to its model. The copy count becomes
   the job's **items per plate**, so 4 copies counts as 4 items.
   **Send & print…** goes straight to the print dialog.

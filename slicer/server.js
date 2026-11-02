@@ -7,6 +7,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { ProfileStore } = require('./profiles');
+const { applyOptions } = require('./options');
 const { addThumbnails } = require('./thumbnail');
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -31,16 +32,6 @@ const store = new ProfileStore(PROFILES_DIR);
 const version = (() => {
   try { return fs.readFileSync(path.join(path.dirname(PROFILES_DIR), '..', 'VERSION'), 'utf8').trim(); } catch { return process.env.ORCA_VERSION || 'unknown'; }
 })();
-
-// Settings the hub's slice dialog may override on the process preset.
-const PROCESS_OVERRIDES = {
-  infill: (v) => ({ sparse_infill_density: `${Math.max(0, Math.min(100, Number(v) || 0))}%` }),
-  supports: (v) => (v === 'off' || !v
-    ? { enable_support: '0' }
-    : { enable_support: '1', support_type: v === 'tree' ? 'tree(auto)' : 'normal(auto)' }),
-  brim: (v) => ({ brim_type: v ? 'auto_brim' : 'no_brim' }),
-  walls: (v) => ({ wall_loops: String(Math.max(1, Math.min(10, Number(v) || 2))) }),
-};
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -136,9 +127,7 @@ async function slice(req) {
     const machineCfg = store.resolve(vendor, 'machine', machine);
     const processCfg = store.resolve(vendor, 'process', req.process);
     const filamentCfg = store.resolve(vendor, 'filament', req.filament);
-    for (const [key, fn] of Object.entries(PROCESS_OVERRIDES)) {
-      if (req.options && key in req.options) Object.assign(processCfg, fn(req.options[key]));
-    }
+    applyOptions(processCfg, req.options);
     // Without an explicit plate the CLI uses Cool Plate and its (low) bed temps.
     const bedType = BED_TYPES.some((b) => b.value === req.bedType) ? req.bedType : store.defaultBedType(vendor, machine, req.filament);
     processCfg.curr_bed_type = bedType;
@@ -164,6 +153,7 @@ async function slice(req) {
     // --repetitions is rejected by Orca 2.4.2's CLI; listing the model N times
     // and arranging gives the same result.
     const copies = Math.max(1, Math.min(64, Math.round(Number(req.copies) || 1)));
+    if (req.options?.vase && copies > 1) throw new Error('Vase mode prints one model at a time. Set copies to 1.');
     const args = [
       '--datadir', path.join(ORCA_HOME, 'data'),
       '--slice', '0',
@@ -180,7 +170,8 @@ async function slice(req) {
     const gcode = fs.readdirSync(dir).filter((n) => n.endsWith('.gcode')).sort()[0];
     if (!gcode) {
       const reason = out.split('\n').map((l) => l.trim()).filter((l) => /error|invalid|not in range|fail|outside|collid|empty|unknown file|can not be parsed/i.test(l)).slice(-4).join(' · ');
-      throw new Error(`Slicing failed (${signal || `exit ${code}`})${reason ? `: ${reason}` : ''}`);
+      const hint = req.options?.vase ? ' Vase mode needs a model that is one solid part.' : '';
+      throw new Error(`Slicing failed (${signal || `exit ${code}`})${reason ? `: ${reason}` : ''}.${hint}`);
     }
     const file = path.join(dir, gcode);
     const stats = gcodeStats(file);

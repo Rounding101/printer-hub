@@ -301,7 +301,7 @@ async function sliceModel(item, printer, body) {
       bedType: result.stats.bedType,
       bedTemp: result.stats.bedTemp,
       nozzleTemp: result.stats.nozzleTemp,
-    });
+    }, { newVersion: true });
   } finally {
     slicerCall('/cleanup', { id: result.id }).catch(() => {});
   }

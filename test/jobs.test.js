@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { JobLog, planFilamentUse } = require('../lib/jobs');
+const { JobLog, planFilamentUse, itemName } = require('../lib/jobs');
 const { SpoolStore } = require('../lib/spools');
 
 function setup() {
@@ -196,4 +196,13 @@ test('a print that started on the old roll is not charged to the new one', () =>
     see('printing', 50, { elapsed: 600 });
     assert.equal(spools.list().find((s) => s.id === roll.id).remainingGrams, 1000);
   } finally { done(); }
+});
+
+test('every version of a hub-sliced file is one item', () => {
+  for (const f of ['gear_ad5m_0.20mm_PLA.gcode', 'gear_ad5m_0.20mm_PLA_v2.gcode', 'gear_ad5m_0.20mm_PLA_x4.gcode', 'gear_ad5m_0.20mm_PLA_x4_v12.gcode']) {
+    assert.equal(itemName(f), 'gear', f);
+  }
+  assert.equal(itemName('bracket_v2_kobrax_0.20mm_PLA.gcode'), 'bracket v2', 'a v2 in the model name stays');
+  assert.equal(itemName('bracket_v2.gcode'), 'bracket v2', 'so does one on an upload');
+  assert.equal(itemName('gear_kobrax_0.12mm_PLA-CF.gcode'), 'gear');
 });

@@ -414,6 +414,27 @@ const Files = (() => {
     f.folder.select();
   }
 
+  // What a hub-sliced file was sliced with, to tell its versions apart.
+  function sliceSummary(i) {
+    const s = i.sliceSettings;
+    if (!s) return null;
+    const o = s.options || {};
+    const name = (el, v) => [...(document.querySelector(`#slice-dlg [name=${el}]`)?.options || [])].find((x) => x.value === v)?.textContent.split(':')[0];
+    return [
+      s.process?.replace(/ @.*$/, ''),
+      o.vase ? 'vase mode' : `${o.infill ?? '?'}% infill`,
+      o.infillPattern && name('infillPattern', o.infillPattern),
+      !o.vase && o.walls && `${o.walls} walls`,
+      o.topLayers !== '' && o.topLayers != null && `${o.topLayers} top layers`,
+      o.bottomLayers !== '' && o.bottomLayers != null && `${o.bottomLayers} bottom layers`,
+      o.supports && o.supports !== 'off' && !o.vase && `${o.supports} supports`,
+      o.brim && 'brim',
+      o.seam && `${name('seam', o.seam)} seam`,
+      o.ironing && o.ironing !== 'no ironing' && `ironing: ${name('ironing', o.ironing)}`,
+      o.fuzzySkin && o.fuzzySkin !== 'none' && 'fuzzy skin',
+    ].filter(Boolean).join(', ');
+  }
+
   function renderLibrary() {
     const body = $('lib-body');
     if (!body) return;
@@ -437,7 +458,7 @@ const Files = (() => {
       const tr = document.createElement('tr');
       const td = (text, cls) => { const el = document.createElement('td'); if (cls) el.className = cls; el.textContent = text ?? ''; tr.append(el); return el; };
       const name = td('', 'item lib-item');
-      name.title = [i.name, i.slicer && `Sliced with ${i.slicer}`, i.material, i.estimate && `Est. ${i.estimate}`].filter(Boolean).join('\n');
+      name.title = [i.name, sliceSummary(i), i.slicer && `Sliced with ${i.slicer}`, i.material, i.estimate && `Est. ${i.estimate}`].filter(Boolean).join('\n');
       const added = new Date(i.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const sent = (i.sentTo || []).map(printerName).join(', ');
       const model = i.modelId && library.find((m) => m.id === i.modelId);

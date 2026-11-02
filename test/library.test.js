@@ -148,3 +148,45 @@ test('a renamed file keeps its items per plate', () => {
     assert.equal(log.defaults['oval rim'], 9);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('a re-slice with different content gets its own name', async () => {
+  const { lib, done } = await setup();
+  const sliced = (body) => lib.addFromStream('gear_ad5m_0.20mm_PLA.gcode', Readable.from([Buffer.from(body)]), {}, { newVersion: true });
+  try {
+    const one = await sliced('; first\nG1 X1\n');
+    const two = await sliced('; second\nG1 X2\n');
+    const three = await sliced('; third\nG1 X3\n');
+    assert.equal(one.name, 'gear_ad5m_0.20mm_PLA.gcode');
+    assert.equal(two.name, 'gear_ad5m_0.20mm_PLA_v2.gcode');
+    assert.equal(three.name, 'gear_ad5m_0.20mm_PLA_v3.gcode');
+    assert.ok(fs.existsSync(lib.filePath(two)), 'the file on disk has the new name');
+    assert.match(lib.read(two.id).toString(), /second/);
+    assert.equal((await sliced('; second\nG1 X2\n')).id, two.id, 'identical content is not stored twice');
+    assert.equal(lib.list().length, 3);
+  } finally { done(); }
+});
+
+test('a new version skips names in use, and old names of renamed files', async () => {
+  const { lib, done } = await setup();
+  const sliced = (body) => lib.addFromStream('gear.gcode', Readable.from([Buffer.from(body)]), {}, { newVersion: true });
+  try {
+    const one = await sliced('; one\n');
+    lib.update(one.id, { name: 'my gear' });
+    assert.equal((await sliced('; two\n')).name, 'gear_v2.gcode', 'a printer may still have the old gear.gcode');
+    assert.equal(lib.freeName('x'.repeat(194) + '.gcode'), 'x'.repeat(194) + '.gcode');
+    const long = 'y'.repeat(194) + '.gcode';
+    await lib.addFromStream(long, Readable.from([Buffer.from('; long\n')]));
+    const next = lib.freeName(long);
+    assert.equal(next.length, 200);
+    assert.match(next, /_v2\.gcode$/);
+  } finally { done(); }
+});
+
+test('uploads with the same name are left as they are', async () => {
+  const { lib, done } = await setup();
+  try {
+    await lib.addFromStream('a.gcode', Readable.from([Buffer.from('; one\n')]));
+    const b = await lib.addFromStream('a.gcode', Readable.from([Buffer.from('; two\n')]));
+    assert.equal(b.name, 'a.gcode');
+  } finally { done(); }
+});

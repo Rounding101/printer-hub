@@ -126,7 +126,10 @@ printer must be idle to receive files.
     start on the model or only from the build plate, brim width and skirt loops.
 
   The dialog remembers your last choices, except vase mode.
-- The result lands in Print files, linked to its model. The copy count becomes
+- The result lands in Print files, linked to its model. Slicing a model again with
+  different settings adds a new file ending in `_v2`, `_v3` and so on, and the
+  earlier ones stay. Hover a file to see what it was sliced with. All versions
+  count as one item in the job log. The copy count becomes
   the job's **items per plate**, so 4 copies counts as 4 items.
   **Send & print…** goes straight to the print dialog.
 - **Previews:** sliced files include preview pictures in the sizes and formats

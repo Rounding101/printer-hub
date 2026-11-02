@@ -3,6 +3,14 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.18.1 — 2026-11-02
+
+### Fixed
+- **Slicing a model again with different settings gets its own file name,**
+  ending in `_v2`, `_v3` and so on. Before, both files had the same name and
+  sending the second overwrote the first on the printer. Hover a file in the
+  library to see what it was sliced with.
+
 ## 0.18.0 — 2026-11-02
 
 ### Added

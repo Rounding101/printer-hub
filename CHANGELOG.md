@@ -3,6 +3,16 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.17.1 — 2026-11-01
+
+### Changed
+- **Filament rolls count down live** as a print runs, by its progress. Hover a
+  roll to see how much is from the print running now.
+
+### Fixed
+- **Adjust** during a print no longer charges the roll again for what the print
+  had already used.
+
 ## 0.17.0 — 2026-11-01
 
 ### Added

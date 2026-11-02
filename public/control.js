@@ -354,7 +354,7 @@ const Control = (() => {
         bar.hidden = false;
         bar.firstElementChild.style.width = `${Math.max(0, Math.min(100, roll.percent ?? 0))}%`;
         el.querySelector('.spool-left').textContent = `${roll.remainingGrams} g left · ${roll.percent}%`;
-        el.title = `${roll.remainingGrams} g of ${roll.capacityGrams} g left (estimated from ${Math.round(roll.usedGrams)} g printed since ${new Date(roll.baseAt).toLocaleDateString()})`;
+        el.title = `${roll.remainingGrams} g of ${roll.capacityGrams} g left (estimated from ${Math.round(roll.usedGrams)} g printed since ${new Date(roll.baseAt).toLocaleDateString()}${Math.round(roll.liveGrams) ? `, including ${Math.round(roll.liveGrams)} g from the print running now` : ''})`;
       } else {
         el.querySelector('.spool-left').textContent = s.ready ? 'Roll not set' : '';
       }

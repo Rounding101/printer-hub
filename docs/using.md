@@ -50,7 +50,9 @@ every slot), so the hub tracks rolls itself:
 
   Cancelled or failed prints are charged by how far they got.
 - Remaining = the roll's starting weight minus the filament charged since. It's
-  recalculated from the job log, so fixing a job's outcome corrects the roll.
+  recalculated from the job log, so fixing a job's outcome corrects the roll. A
+  running print counts live, by its progress, so the number is an estimate until
+  the print ends. **Adjust** during a print counts only what it uses from then on.
 - **Adjust** sets the remaining grams after weighing a roll (subtract the empty
   spool, usually 200–250 g). Rolls are stored in `data/spools.json`.
 - The job log gains a Filament column, and the CSV gets `filament_g`.

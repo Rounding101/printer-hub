@@ -125,3 +125,75 @@ test('filament plans: known weights win, and an unknown split stays unassigned',
   assert.deepEqual(planFilamentUse(null, 40, false), [{ slot: 0, grams: 40 }]);
   assert.equal(planFilamentUse([{ slot: 1, grams: 0 }], 0, true), null);
 });
+
+test('a roll counts down while a print runs', () => {
+  const { log, see, done } = setup();
+  try {
+    const spools = new SpoolStore(log.dir, log);
+    const roll = spools.install({ printerId: 'k', slot: 3, remainingGrams: 600 });
+    const left = () => spools.list().find((s) => s.id === roll.id);
+    let told = 0;
+    log.on('progress', () => { told += 1; });
+    see('printing', 0, { elapsed: 0 });
+    log.setFilamentPlan(log.list()[0].id, [{ slot: 3, grams: 80 }]);
+    assert.equal(left().remainingGrams, 600);
+    see('printing', 25, { elapsed: 0 });
+    assert.equal(left().usedGrams, 20);
+    assert.equal(left().liveGrams, 20);
+    assert.equal(left().remainingGrams, 580);
+    see('printing', 25.4, { elapsed: 0 });
+    assert.equal(told, 1, 'only whole percents are announced');
+    see('completed', 100, { elapsed: 0 });
+    assert.equal(left().remainingGrams, 520);
+    assert.equal(left().liveGrams, 0);
+  } finally { done(); }
+});
+
+test('a cancelled print keeps what it used, on the right roll only', () => {
+  const { log, see, done } = setup();
+  try {
+    const spools = new SpoolStore(log.dir, log);
+    const mine = spools.install({ printerId: 'k', slot: 3, remainingGrams: 600 });
+    const other = spools.install({ printerId: 'k', slot: 0, remainingGrams: 600 });
+    see('printing', 0, { elapsed: 0 });
+    log.setFilamentPlan(log.list()[0].id, [{ slot: 3, grams: 80 }]);
+    see('printing', 50, { elapsed: 0 });
+    see('idle', 50);
+    const view = (r) => spools.list().find((s) => s.id === r.id);
+    assert.equal(view(mine).remainingGrams, 560);
+    assert.equal(view(other).remainingGrams, 600);
+  } finally { done(); }
+});
+
+test('Adjust during a print only counts what it uses afterwards', () => {
+  const { log, see, done } = setup();
+  try {
+    const spools = new SpoolStore(log.dir, log);
+    const roll = spools.install({ printerId: 'k', slot: 3, remainingGrams: 600 });
+    const left = () => spools.list().find((s) => s.id === roll.id).remainingGrams;
+    see('printing', 0, { elapsed: 0 });
+    log.setFilamentPlan(log.list()[0].id, [{ slot: 3, grams: 80 }]);
+    see('printing', 50, { elapsed: 0 });
+    spools.adjust(roll.id, 500);
+    assert.equal(left(), 500, 'the weight typed in is what shows');
+    see('printing', 75, { elapsed: 0 });
+    assert.equal(left(), 480);
+    spools.adjust(roll.id, 470);
+    assert.equal(left(), 470, 'adjusting twice in one print');
+    see('completed', 100, { elapsed: 0 });
+    assert.equal(left(), 450);
+    assert.equal(new SpoolStore(log.dir, log).list().find((s) => s.id === roll.id).remainingGrams, 450, 'after a restart too');
+  } finally { done(); }
+});
+
+test('a print that started on the old roll is not charged to the new one', () => {
+  const { log, see, done } = setup();
+  try {
+    const spools = new SpoolStore(log.dir, log);
+    see('printing', 0, { elapsed: 600 });
+    log.setFilamentPlan(log.list()[0].id, [{ slot: 3, grams: 80 }]);
+    const roll = spools.install({ printerId: 'k', slot: 3, remainingGrams: 1000 });
+    see('printing', 50, { elapsed: 600 });
+    assert.equal(spools.list().find((s) => s.id === roll.id).remainingGrams, 1000);
+  } finally { done(); }
+});

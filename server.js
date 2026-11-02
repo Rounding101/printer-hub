@@ -203,6 +203,7 @@ async function planFilament(job, phase) {
   const plan = planFilamentUse(colors, library.findByName(job.file)?.grams ?? p.state.job?.grams, multi);
   if (plan) jobs.setFilamentPlan(job.id, plan);
 }
+jobs.on('progress', () => broadcast('spools', spools.list()));
 library.on('change', () => { broadcast('library', libraryView()); broadcast('folders', library.folders()); });
 
 // Refuses print files sliced for a different printer.

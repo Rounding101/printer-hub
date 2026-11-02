@@ -436,7 +436,7 @@ input[type="color"] { padding: 2px; height: 36px; width: 100%; cursor: pointer; 
 [data-role="viewer"] .card .actions .btn:not(.act-controls),
 [data-role="viewer"] :is(.ctl-files .seg, #ctl-drop, #ctl-progress, #ctl-actions, .ctl-motion, #ctl-presets, #ctl-slots-refresh),
 [data-role="viewer"] :is(.ctl-thermal, .ctl-filament) :is(button, input[type="range"]),
-[data-role="viewer"] :is(#lib-drop, #add-past),
+[data-role="viewer"] :is(#lib-drop, #add-past, #lib-new-folder, .lib-folder-tools),
 [data-role="viewer"] .row-actions :is(button, select) { display: none !important; }
 [data-role="viewer"] :is(.ctl-thermal, .ctl-filament, #jobs-body) :is(input, select) { pointer-events: none; opacity: 0.7; }
 /* Viewers still see whether the light is on, but can't switch it. */
@@ -573,3 +573,41 @@ dialog.video-dlg video { width: 100%; max-height: 70vh; background: #000; border
 .jobs-seg { align-self: flex-start; display: flex; width: fit-content; margin: 0; }
 .item-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .item-link:hover { color: var(--accent); text-decoration: underline; }
+
+/* Library: folders and tags */
+.lib-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.lib-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lib-folders { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+.lib-folders-h { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 8px 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.lib-folders ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lib-folders li { position: relative; }
+.lib-folder { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.lib-folder:hover { background: var(--surface-2); }
+.lib-folder[aria-current="true"] { background: var(--surface-2); font-weight: 600; }
+.lib-folder.over { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lib-folder .count { flex: none; font-size: 12px; font-weight: 500; color: var(--muted); }
+.lib-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-folder-tools { position: absolute; top: 2px; right: 2px; display: none; gap: 2px; background: var(--surface-2); border-radius: 8px; }
+.lib-folders li:hover .lib-folder-tools, .lib-folder-tools:focus-within { display: flex; }
+.lib-tag-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lib-tag-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.lib-tag { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.lib-tag:hover { color: var(--text); }
+.lib-tag.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lib-row-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.lib-row-tags:empty { display: none; }
+.lib-tag-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.lib-tag-suggest:empty { display: none; }
+.lib-name-field { display: flex; align-items: center; gap: 6px; }
+.lib-name-field input { flex: 1; min-width: 0; }
+.lib-ext { color: var(--muted); font-size: 14px; font-weight: 500; }
+#lib-drop-target { display: block; margin-top: 4px; color: var(--text); }
+#lib-drop-target:empty { display: none; }
+/* Below this the file table needs the sidebar's width, or its buttons scroll away. */
+@media (max-width: 1180px) {
+  .lib-layout { grid-template-columns: minmax(0, 1fr); }
+  .lib-folders ul { max-height: 180px; overflow: auto; }
+}
+@media (max-width: 820px) {
+  .lib-folder-tools { display: flex; position: static; background: none; justify-content: flex-end; }
+}

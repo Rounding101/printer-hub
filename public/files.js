@@ -2,6 +2,11 @@
 // hub's file library. Uses api(), toast() and cards from app.js.
 const Files = (() => {
   let library = [];
+  let folders = [];
+  let libKind = 'print';
+  let libFolder = ''; // '' is everything, NO_FOLDER the files in no folder
+  const NO_FOLDER = '\0';
+  const libTags = new Set(); // lower case
   const $ = (id) => document.getElementById(id);
   const enc = encodeURIComponent;
   const rgb = (c) => `rgb(${(c || [0, 0, 0]).slice(0, 3).join(',')})`;
@@ -131,14 +136,14 @@ const Files = (() => {
       opts = await api(`/api/printers/${enc(printerId)}/print-options?file=${enc(file)}`);
     } catch (err) {
       if (req !== printReq) return;
-      const lib = library.find((i) => i.name === file);
+      const lib = library.find((i) => i.name === file || i.previousNames?.includes(file));
       body.innerHTML = '';
       body.append(Object.assign(document.createElement('p'), { className: 'err', textContent: err.message }));
       if (lib) {
         const b = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: 'Send from library first' });
         b.onclick = async () => {
           b.disabled = true;
-          try { await sendFromLibrary(lib.id, printerId); openPrint(printerId, file); }
+          try { await sendFromLibrary(lib.id, printerId); openPrint(printerId, lib.name); }
           catch (e) { toast(e.message, true); b.disabled = false; }
         };
         body.append(b);
@@ -223,6 +228,192 @@ const Files = (() => {
       || null;
   }
 
+  // ---- Folders and tags -----------------------------------------------------------
+
+  const within = (item, folder) => item.folder === folder || !!item.folder?.startsWith(`${folder}/`);
+  const inFolder = (item) => (libFolder === '' ? true : libFolder === NO_FOLDER ? !item.folder : within(item, libFolder));
+
+  function moveToFolder(id, folder) {
+    api(`/api/library/${enc(id)}`, { method: 'PATCH', body: { folder } }).catch((err) => toast(err.message, true));
+  }
+
+  // Files can be dragged from the table onto a folder.
+  function folderRow(label, value, count, depth = 0) {
+    const li = document.createElement('li');
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'lib-folder' });
+    b.style.paddingLeft = `${8 + depth * 14}px`;
+    b.title = value && value !== NO_FOLDER ? value : label;
+    b.append(
+      Object.assign(document.createElement('span'), { className: 'lib-folder-name', textContent: label }),
+      Object.assign(document.createElement('span'), { className: 'count', textContent: count || '' }),
+    );
+    if (libFolder === value) b.setAttribute('aria-current', 'true');
+    b.onclick = () => { libFolder = value; renderLibrary(); };
+    if (value !== '') {
+      b.ondragover = (e) => { if (e.dataTransfer.types.includes('application/x-lib-item')) { e.preventDefault(); b.classList.add('over'); } };
+      b.ondragleave = () => b.classList.remove('over');
+      b.ondrop = (e) => {
+        e.preventDefault();
+        b.classList.remove('over');
+        const id = e.dataTransfer.getData('application/x-lib-item');
+        if (id) moveToFolder(id, value === NO_FOLDER ? '' : value);
+      };
+    }
+    li.append(b);
+    return li;
+  }
+
+  function renderFolders(all) {
+    if (libFolder && libFolder !== NO_FOLDER && !folders.includes(libFolder)) libFolder = '';
+    const rows = [folderRow('All files', '', all.length)];
+    if (folders.length) rows.push(folderRow('No folder', NO_FOLDER, all.filter((i) => !i.folder).length));
+    for (const f of folders) {
+      const parts = f.split('/');
+      const li = folderRow(parts[parts.length - 1], f, all.filter((i) => within(i, f)).length, parts.length - 1);
+      const tools = Object.assign(document.createElement('span'), { className: 'lib-folder-tools' });
+      const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small ghost icon', textContent: '✎', title: 'Rename folder' });
+      edit.setAttribute('aria-label', `Rename folder ${f}`);
+      edit.onclick = () => openFolder(f);
+      const del = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small ghost icon', textContent: '✕', title: 'Remove folder' });
+      del.setAttribute('aria-label', `Remove folder ${f}`);
+      del.onclick = async () => {
+        const n = library.filter((i) => within(i, f)).length;
+        const up = parts.slice(0, -1).join('/') || 'no folder';
+        if (!confirm(n ? `Remove the folder ${f}? Its ${n === 1 ? 'file moves' : `${n} files move`} to ${up}. No files are deleted.` : `Remove the folder ${f}?`)) return;
+        try { await api('/api/library/folders', { method: 'DELETE', body: { folder: f } }); } catch (err) { toast(err.message, true); }
+      };
+      tools.append(edit, del);
+      li.append(tools);
+      rows.push(li);
+    }
+    $('lib-folder-list').replaceChildren(...rows);
+    const into = libFolder && libFolder !== NO_FOLDER ? libFolder : '';
+    $('lib-drop-target').textContent = into ? ` New files go into ${into}.` : '';
+  }
+
+  function tagChip(tag, onclick) {
+    const on = libTags.has(tag.toLowerCase());
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: `lib-tag${on ? ' on' : ''}`, textContent: tag, title: on ? `Stop filtering by ${tag}` : `Show files tagged ${tag}` });
+    b.setAttribute('aria-pressed', String(on));
+    b.onclick = onclick || (() => {
+      const k = tag.toLowerCase();
+      if (!libTags.delete(k)) libTags.add(k);
+      renderLibrary();
+    });
+    return b;
+  }
+
+  function renderTagFilter(shown) {
+    const names = new Map();
+    for (const i of shown) for (const t of i.tags || []) if (!names.has(t.toLowerCase())) names.set(t.toLowerCase(), t);
+    // Filters in use stay visible, or they couldn't be turned off.
+    for (const k of libTags) if (!names.has(k)) names.set(k, k);
+    const box = $('lib-tag-filter');
+    box.hidden = !names.size;
+    box.replaceChildren(
+      Object.assign(document.createElement('span'), { className: 'lib-tag-label', textContent: 'Tags' }),
+      ...[...names.values()].sort((a, b) => a.localeCompare(b)).map((t) => tagChip(t)),
+    );
+  }
+
+  function rowExtras(i) {
+    const box = Object.assign(document.createElement('span'), { className: 'lib-row-tags' });
+    box.append(...(i.tags || []).map((t) => tagChip(t)));
+    return box;
+  }
+
+  function editButton(i) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small ghost icon', textContent: '✎', title: 'Rename, move or tag' });
+    b.setAttribute('aria-label', `Edit ${i.name}`);
+    b.onclick = () => openEdit(i);
+    return b;
+  }
+
+  function makeDraggable(tr, i) {
+    tr.draggable = true;
+    tr.ondragstart = (e) => {
+      e.dataTransfer.setData('application/x-lib-item', i.id);
+      e.dataTransfer.effectAllowed = 'move';
+    };
+  }
+
+  function openEdit(item) {
+    const dlg = $('lib-edit-dlg');
+    const f = dlg.querySelector('form');
+    const ext = (/\.[^.]+$/.exec(item.name) || [''])[0];
+    const err = dlg.querySelector('.err');
+    err.hidden = true;
+    f.name.value = ext ? item.name.slice(0, -ext.length) : item.name;
+    dlg.querySelector('.lib-ext').textContent = ext;
+    dlg.querySelector('.lib-rename-hint').hidden = !(item.sentTo || []).length;
+    f.folder.value = item.folder || '';
+    f.tags.value = (item.tags || []).join(', ');
+    $('lib-folder-options').replaceChildren(...folders.map((x) => new Option('', x)));
+
+    // Tags already in use, to pick from.
+    const paintSuggest = () => {
+      const mine = new Set(f.tags.value.split(',').map((t) => t.trim().toLowerCase()));
+      const seen = new Map();
+      for (const i of library) for (const t of i.tags || []) if (!mine.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+      dlg.querySelector('.lib-tag-suggest').replaceChildren(...[...seen.values()].sort((a, b) => a.localeCompare(b)).map((t) => Object.assign(document.createElement('button'), {
+        type: 'button',
+        className: 'lib-tag',
+        textContent: `+ ${t}`,
+        onclick: () => { f.tags.value = [f.tags.value.trim().replace(/,$/, ''), t].filter(Boolean).join(', '); paintSuggest(); },
+      })));
+    };
+    f.tags.oninput = paintSuggest;
+    paintSuggest();
+    dlg.querySelector('.lib-edit-cancel').onclick = () => dlg.close();
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      try {
+        await api(`/api/library/${enc(item.id)}`, { method: 'PATCH', body: { name: f.name.value + ext, folder: f.folder.value, tags: f.tags.value.split(',') } });
+        dlg.close();
+      } catch (x) {
+        err.textContent = x.message;
+        err.hidden = false;
+      }
+    };
+    dlg.showModal();
+    f.name.select();
+  }
+
+  // A new folder goes inside the one being viewed. Renaming edits the last part;
+  // type a / to move it, as the whole path then replaces it.
+  function openFolder(existing) {
+    const dlg = $('lib-folder-dlg');
+    const f = dlg.querySelector('form');
+    const err = dlg.querySelector('.err');
+    const parent = existing ? existing.split('/').slice(0, -1).join('/') : (libFolder === NO_FOLDER ? '' : libFolder);
+    err.hidden = true;
+    dlg.querySelector('.lib-folder-title').textContent = existing ? 'Rename folder' : 'New folder';
+    dlg.querySelector('.lib-folder-hint').textContent = parent ? `Inside ${parent}.` : 'At the top level.';
+    f.folder.value = existing ? existing.split('/').pop() : '';
+    dlg.querySelector('.lib-folder-cancel').onclick = () => dlg.close();
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      const path = [parent, f.folder.value].filter(Boolean).join('/');
+      try {
+        const r = existing
+          ? await api('/api/library/folders', { method: 'PATCH', body: { from: existing, to: path } })
+          : await api('/api/library/folders', { body: { folder: path } });
+        if (!existing || libFolder === existing) libFolder = r.folder;
+        // The live update may arrive after this answer: don't lose the selection.
+        if (!folders.includes(r.folder)) folders = [...folders, r.folder];
+        renderLibrary();
+        dlg.close();
+      } catch (x) {
+        err.textContent = x.message;
+        err.hidden = false;
+      }
+    };
+    dlg.showModal();
+    f.folder.select();
+  }
+
   function renderLibrary() {
     const body = $('lib-body');
     if (!body) return;
@@ -231,8 +422,16 @@ const Files = (() => {
     const models = library.filter((i) => i.kind === 'model');
     $('lib-count-print').textContent = prints.length || '';
     $('lib-count-model').textContent = models.length || '';
-    renderModels(models.filter((i) => !q || i.name.toLowerCase().includes(q)));
-    const items = prints.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.printerModel || '').toLowerCase().includes(q));
+    const panel = libKind === 'model' ? models : prints;
+    renderFolders(panel);
+    renderTagFilter(panel.filter(inFolder));
+    const hasTags = (i) => [...libTags].every((k) => (i.tags || []).some((t) => t.toLowerCase() === k));
+    const matches = (i) => inFolder(i) && hasTags(i) && (!q || [i.name, i.printerModel, i.folder, ...(i.tags || [])].some((v) => (v || '').toLowerCase().includes(q)));
+    const filtering = q || libFolder || libTags.size;
+    $('model-empty').textContent = filtering ? 'No models match. Try another folder, tag or search.' : 'No models yet. Drop .stl, .obj, .step or .3mf files above.';
+    $('lib-empty').textContent = filtering ? 'No print files match. Try another folder, tag or search.' : "No print files yet. Drop some above, slice a model, or upload from a printer's Start print dialog.";
+    renderModels(models.filter(matches));
+    const items = prints.filter(matches);
     const printers = [...cards.values()].map((c) => c.state);
     body.replaceChildren(...items.map((i) => {
       const tr = document.createElement('tr');
@@ -255,6 +454,7 @@ const Files = (() => {
         Object.assign(document.createElement('span'), {
           className: 'lib-sub',
           textContent: [
+            libFolder === '' && i.folder,
             model ? `Sliced from ${model.name}` : `Added ${added}`,
             i.copies > 1 && `${i.copies} copies`,
             i.material, i.grams && `${Math.round(i.grams)} g`, i.estimate,
@@ -263,7 +463,9 @@ const Files = (() => {
             !i.printerModel && !i.slicedFor && 'Target printer unknown, check before printing',
           ].filter(Boolean).join(' · '),
         }),
+        rowExtras(i),
       );
+      makeDraggable(tr, i);
       td(i.printerModel || (i.slicedFor ? printerName(i.slicedFor) : '—'), 'nowrap');
       td(size(i.size), 'num nowrap');
 
@@ -318,7 +520,7 @@ const Files = (() => {
         if (!confirm(`Delete ${i.name} from the hub library? Copies already on printers stay there.`)) return;
         try { await api(`/api/library/${enc(i.id)}`, { method: 'DELETE' }); } catch (err) { toast(err.message, true); }
       };
-      wrap.append(sel, send, print, dl, del);
+      wrap.append(sel, send, print, editButton(i), dl, del);
       actions.append(wrap);
       tr.append(actions);
       return tr;
@@ -349,8 +551,10 @@ const Files = (() => {
       name.className = 'item lib-item';
       name.append(
         Object.assign(document.createElement('span'), { className: 'lib-name', textContent: m.name }),
-        Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: `Added ${new Date(m.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` }),
+        Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [libFolder === '' && m.folder, `Added ${new Date(m.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`].filter(Boolean).join(' · ') }),
+        rowExtras(m),
       );
+      makeDraggable(tr, m);
       const sl = document.createElement('td');
       sl.className = 'nowrap';
       sl.textContent = slices.length
@@ -376,7 +580,7 @@ const Files = (() => {
         if (!confirm(`Delete ${m.name}? Its sliced print files stay in the library.`)) return;
         try { await api(`/api/library/${enc(m.id)}`, { method: 'DELETE' }); } catch (err) { toast(err.message, true); }
       };
-      wrap.append(go, dl, del);
+      wrap.append(go, editButton(m), dl, del);
       actions.append(wrap);
       tr.append(name, sl, sz, actions);
       return tr;
@@ -388,6 +592,8 @@ const Files = (() => {
     document.querySelectorAll('[data-lib]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.lib === kind)));
     document.querySelectorAll('[data-lib-panel]').forEach((p) => { p.hidden = p.dataset.libPanel !== kind; });
     try { localStorage.setItem('libPanel', kind); } catch { /* storage unavailable */ }
+    libKind = kind;
+    renderLibrary();
   }
 
   // ---- Slice dialog ---------------------------------------------------------------
@@ -505,8 +711,9 @@ const Files = (() => {
   async function addToLibrary(fileList) {
     for (const file of fileList) {
       try {
-        const item = await upload(`/api/library?name=${enc(file.name)}`, file, $('lib-progress'));
-        toast(`Saved ${file.name} to ${item.kind === 'model' ? 'Models' : 'Print files'}`);
+        const into = libFolder && libFolder !== NO_FOLDER ? libFolder : '';
+        const item = await upload(`/api/library?name=${enc(file.name)}${into ? `&folder=${enc(into)}` : ''}`, file, $('lib-progress'));
+        toast(`Saved ${file.name} to ${into || (item.kind === 'model' ? 'Models' : 'Print files')}`);
         showLibPanel(item.kind === 'model' ? 'model' : 'print');
       } catch (err) { toast(`${file.name}: ${err.message}`, true); }
     }
@@ -516,6 +723,7 @@ const Files = (() => {
     const drop = $('lib-drop');
     $('lib-input').addEventListener('change', (e) => { addToLibrary([...e.target.files]); e.target.value = ''; });
     $('lib-search').addEventListener('input', renderLibrary);
+    $('lib-new-folder').addEventListener('click', () => openFolder());
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); });
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); });
     drop.addEventListener('drop', (e) => addToLibrary([...e.dataTransfer.files]));
@@ -540,6 +748,7 @@ const Files = (() => {
   document.addEventListener('DOMContentLoaded', initLibrary);
 
   function setLibrary(items) { library = items; renderLibrary(); }
+  function setFolders(list) { folders = list; renderLibrary(); }
 
-  return { openPrinterFiles, openPrint, setLibrary, renderLibrary, uploadToPrinter };
+  return { openPrinterFiles, openPrint, setLibrary, setFolders, renderLibrary, uploadToPrinter };
 })();

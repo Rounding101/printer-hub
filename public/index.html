@@ -153,7 +153,7 @@
       <p><strong>Drop files here</strong> or
         <label class="link-btn">browse<input type="file" id="lib-input" accept=".gcode,.gx,.3mf,.bgcode,.stl,.obj,.step,.stp,.amf" multiple hidden></label>
       </p>
-      <p class="dlg-hint">Print files (.gcode, .gx, .bgcode, sliced .3mf) or models to slice (.stl, .obj, .step, .3mf projects), up to 512 MB each.</p>
+      <p class="dlg-hint">Print files (.gcode, .gx, .bgcode, sliced .3mf) or models to slice (.stl, .obj, .step, .3mf projects), up to 512 MB each.<span id="lib-drop-target"></span></p>
       <div class="progress" id="lib-progress" hidden><div class="progress-fill"></div><span class="progress-text"></span></div>
     </div>
     <div class="toolbar">
@@ -162,10 +162,17 @@
         <button type="button" role="tab" data-lib="model" aria-selected="false">Models <span class="count" id="lib-count-model"></span></button>
       </div>
       <label class="grow">Search
-        <input id="lib-search" type="search" placeholder="File name or printer model">
+        <input id="lib-search" type="search" placeholder="File name, tag, folder or printer model">
       </label>
       <p class="slicer-status" id="slicer-status"></p>
     </div>
+    <div class="lib-layout">
+    <nav class="lib-folders" aria-label="Folders">
+      <div class="lib-folders-h"><span>Folders</span><button type="button" class="btn small ghost" id="lib-new-folder">New</button></div>
+      <ul id="lib-folder-list"></ul>
+    </nav>
+    <div class="lib-main">
+    <div class="lib-tag-filter" id="lib-tag-filter" hidden></div>
     <div class="table-wrap" data-lib-panel="print">
       <table class="table">
         <thead><tr><th>File</th><th>Sliced for</th><th class="num">Size</th><th></th></tr></thead>
@@ -179,6 +186,8 @@
         <tbody id="model-body"></tbody>
       </table>
       <p class="table-empty" id="model-empty">No models yet. Drop .stl, .obj, .step or .3mf files above.</p>
+    </div>
+    </div>
     </div>
   </section>
 
@@ -311,6 +320,44 @@
       <div class="dlg-actions">
         <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary pd-start" value="start" disabled>Start print</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lib-edit-dlg">
+    <form class="dlg form">
+      <h3>Edit file</h3>
+      <label>Name
+        <span class="lib-name-field"><input name="name" required maxlength="190" autocomplete="off"><span class="lib-ext"></span></span>
+      </label>
+      <p class="dlg-hint lib-rename-hint">Copies already on a printer keep the old name there. The next Send or Print uploads this name.</p>
+      <label>Folder
+        <input name="folder" list="lib-folder-options" placeholder="No folder" autocomplete="off">
+        <datalist id="lib-folder-options"></datalist>
+      </label>
+      <p class="dlg-hint">Pick one or type a new name. Use / for a subfolder, like Magnets/Oval.</p>
+      <label>Tags
+        <input name="tags" placeholder="gifts, magnets, PETG" autocomplete="off">
+      </label>
+      <p class="dlg-hint">Separate tags with commas.</p>
+      <div class="lib-tag-suggest"></div>
+      <p class="err" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn ghost lib-edit-cancel">Cancel</button>
+        <button class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lib-folder-dlg">
+    <form class="dlg form">
+      <h3 class="lib-folder-title"></h3>
+      <p class="dlg-hint lib-folder-hint"></p>
+      <label>Folder name <input name="folder" required maxlength="300" autocomplete="off"></label>
+      <p class="err" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn ghost lib-folder-cancel">Cancel</button>
+        <button class="btn primary">Save</button>
       </div>
     </form>
   </dialog>

@@ -11,7 +11,7 @@ const { PrusaLinkDriver } = require('./drivers/prusalink');
 const { PrinterStore } = require('./lib/printers');
 const { Timelapses } = require('./lib/timelapse');
 const { JobLog, planFilamentUse } = require('./lib/jobs');
-const { Library } = require('./lib/library');
+const { Library, folderPath } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
 const { SpoolStore } = require('./lib/spools');
 const { AuthStore, allowed } = require('./lib/auth');
@@ -203,7 +203,7 @@ async function planFilament(job, phase) {
   const plan = planFilamentUse(colors, library.findByName(job.file)?.grams ?? p.state.job?.grams, multi);
   if (plan) jobs.setFilamentPlan(job.id, plan);
 }
-library.on('change', () => broadcast('library', libraryView()));
+library.on('change', () => { broadcast('library', libraryView()); broadcast('folders', library.folders()); });
 
 // Refuses print files sliced for a different printer.
 function assertFits(item, printer) {
@@ -290,6 +290,8 @@ async function sliceModel(item, printer, body) {
     const name = `${base}_${tag(printer.state.id)}_${layer}_${material}${copies > 1 ? `_x${copies}` : ''}.gcode`;
     return await library.addFromStream(name, fs.createReadStream(result.output), {
       modelId: item.id,
+      ...(item.folder ? { folder: item.folder } : {}),
+      ...(item.tags ? { tags: item.tags } : {}),
       copies,
       slicedFor: printer.state.id,
       sliceSettings: { process: body.process, filament: body.filament, bedType: result.stats.bedType, options: body.options || {} },
@@ -553,6 +555,7 @@ const server = http.createServer(async (req, res) => {
     res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot())}\n\n`);
     res.write(`event: jobs\ndata: ${JSON.stringify(jobs.list())}\n\n`);
     res.write(`event: library\ndata: ${JSON.stringify(libraryView())}\n\n`);
+    res.write(`event: folders\ndata: ${JSON.stringify(library.folders())}\n\n`);
     res.write(`event: spools\ndata: ${JSON.stringify(spools.list())}\n\n`);
     clients.set(res, ctx.sessionId);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
@@ -678,7 +681,16 @@ const server = http.createServer(async (req, res) => {
     try {
       if (!parts[2] && req.method === 'GET') return json(res, 200, libraryView());
       if (!parts[2] && req.method === 'POST') {
-        return json(res, 200, await library.addFromStream(url.searchParams.get('name'), req));
+        const folder = folderPath(url.searchParams.get('folder'));
+        return json(res, 200, await library.addFromStream(url.searchParams.get('name'), req, folder ? { folder } : {}));
+      }
+      if (parts[2] === 'folders') {
+        if (req.method === 'GET') return json(res, 200, library.folders());
+        const body = await readBody(req);
+        if (req.method === 'POST') return json(res, 200, { folder: library.addFolder(body.folder) });
+        if (req.method === 'PATCH') return json(res, 200, { folder: library.renameFolder(body.from, body.to) });
+        if (req.method === 'DELETE') { library.removeFolder(body.folder); return json(res, 200, { ok: true }); }
+        return json(res, 404, { error: 'Not found' });
       }
       const item = library.get(parts[2]);
       if (parts[3] === 'thumb' && req.method === 'GET') {
@@ -706,6 +718,12 @@ const server = http.createServer(async (req, res) => {
         if (!p) throw new Error('Unknown printer');
         await sendToPrinter(item, p);
         return json(res, 200, { ok: true, file: item.name });
+      }
+      if (!parts[3] && req.method === 'PATCH') {
+        const oldName = item.name;
+        const updated = library.update(item.id, await readBody(req));
+        if (updated.name !== oldName) jobs.renamedFile(oldName, updated.name);
+        return json(res, 200, updated);
       }
       if (!parts[3] && req.method === 'DELETE') { library.remove(item.id); return json(res, 200, { ok: true }); }
       return json(res, 404, { error: 'Not found' });

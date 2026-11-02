@@ -3,6 +3,17 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.17.0 — 2026-11-01
+
+### Added
+- **Rename library files.** The extension stays, and prints that use the old name
+  keep working. The next send uploads the new name to the printer.
+- **Folders in the library,** with subfolders. Drag a file onto a folder to move
+  it, and uploads go into the folder you're viewing. Removing a folder keeps its
+  files.
+- **Tags on library files.** Click tags to filter, and search finds them too.
+- Files sliced from a model start in its folder with its tags.
+
 ## 0.16.1 — 2026-11-01
 
 ### Fixed

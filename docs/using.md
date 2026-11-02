@@ -70,6 +70,18 @@ MQTT `axis/move`, `axis/turnOff`, `tempature/set`, `fan/setSpeed` and
   Docker). The hub reads the slicer header to show which printer and material
   each file was sliced for, and suggests a matching printer. **Send** copies the
   file to a printer. **Print…** sends it if needed, then opens the print dialog.
+- **Rename, tag and move:** the ✎ button on a file changes its name, folder and
+  tags. The extension stays. A printer keeps any copy it already has under the
+  old name, and the next **Send** or **Print…** uploads the new name. Prints
+  already running or logged keep working, and past job log entries keep the old
+  name, so **By item** lists the new name separately.
+- **Folders:** the list beside the table. **New** makes a folder inside the one
+  you're viewing, and new uploads go into the one you're viewing. Drag a file
+  onto a folder to move it. A folder shows the files in its subfolders too.
+  Removing a folder never deletes files: they move up a level. Files sliced from
+  a model start in the model's folder with its tags. Folders go 5 levels deep.
+- **Tags:** click a tag to show only files that have it, and click more to narrow
+  it down. Search also finds tags and folder names.
 - **Start print… → Upload from computer:** uploads straight to that printer
   and keeps a copy in the library. With **Print after upload** on, the print
   dialog opens right after.

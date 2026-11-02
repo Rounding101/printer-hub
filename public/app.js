@@ -346,6 +346,7 @@ function connect() {
   es.addEventListener('jobs', (e) => Jobs.setAll(JSON.parse(e.data)));
   es.addEventListener('job', (e) => Jobs.upsert(JSON.parse(e.data)));
   es.addEventListener('library', (e) => Files.setLibrary(JSON.parse(e.data)));
+  es.addEventListener('folders', (e) => Files.setFolders(JSON.parse(e.data)));
   es.addEventListener('spools', (e) => Control.setSpools(JSON.parse(e.data)));
   es.onerror = async () => {
     conn.classList.remove('live'); // EventSource reconnects on its own...

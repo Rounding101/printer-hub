@@ -1,0 +1,150 @@
+// Library organizing: renaming files, tags and folders.
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { Readable } = require('node:stream');
+const { Library, folderPath, cleanTags } = require('../lib/library');
+const { JobLog } = require('../lib/jobs');
+
+async function setup() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'library-'));
+  const lib = new Library(dir);
+  const add = (name, extra) => lib.addFromStream(name, Readable.from([Buffer.from(`; ${name}\nG1 X1\n`)]), extra);
+  return { dir, lib, add, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('renaming moves the file on disk and keeps its extension', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('rim.gcode');
+    lib.update(a.id, { name: 'Oval rim' });
+    assert.equal(lib.get(a.id).name, 'Oval rim.gcode');
+    assert.ok(fs.existsSync(lib.filePath(lib.get(a.id))));
+    assert.match(lib.read(a.id).toString(), /rim\.gcode/);
+    lib.update(a.id, { name: 'Rim 2.GCODE' });
+    assert.equal(lib.get(a.id).name, 'Rim 2.gcode');
+    lib.update(a.id, { name: 'rim.stl' });
+    assert.equal(lib.get(a.id).name, 'rim.stl.gcode', 'a typed extension can not change the type');
+  } finally { done(); }
+});
+
+test('a renamed file still answers to its old name, and is sent again', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('rim.gcode');
+    lib.markSent(a.id, 'kobra');
+    lib.update(a.id, { name: 'oval' });
+    assert.equal(lib.findByName('rim.gcode').id, a.id, 'a running print keeps its weight and preview');
+    assert.equal(lib.findByName('oval.gcode').id, a.id);
+    assert.deepEqual(lib.get(a.id).sentTo, [], 'the printer only has the old name');
+    // A new file with the old name takes it over.
+    const b = await add('rim.gcode');
+    assert.equal(lib.findByName('rim.gcode').id, b.id);
+  } finally { done(); }
+});
+
+test('bad renames are refused and change nothing', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('a.gcode');
+    await add('b.gcode');
+    assert.throws(() => lib.update(a.id, { name: 'B' }), /already has/);
+    assert.throws(() => lib.update(a.id, { name: '' }), /Invalid/);
+    assert.equal(lib.update(a.id, { name: '../../evil' }).name, 'evil.gcode', 'paths are dropped');
+    assert.equal(path.dirname(lib.filePath(lib.get(a.id))), path.join(lib.dir, a.id));
+    assert.equal(lib.update(a.id, { name: 'evil' }).previousNames.length, 1, 'same name is no rename');
+  } finally { done(); }
+});
+
+test('a long name keeps its extension', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('a.gcode');
+    assert.match(lib.update(a.id, { name: 'x'.repeat(300) }).name, /^x+\.gcode$/);
+    assert.equal(lib.get(a.id).name.length, 200);
+  } finally { done(); }
+});
+
+test('tags are cleaned and can be cleared', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    assert.deepEqual(cleanTags(' PLA, pla ,, gifts'), ['PLA', 'gifts']);
+    assert.throws(() => cleanTags(Array.from({ length: 21 }, (_, i) => `t${i}`)), /20 tags/);
+    const a = await add('a.gcode');
+    assert.deepEqual(lib.update(a.id, { tags: ['Magnets', 'magnets', 'PETG'] }).tags, ['Magnets', 'PETG']);
+    assert.equal(lib.update(a.id, { tags: [] }).tags, undefined);
+  } finally { done(); }
+});
+
+test('folder paths are tidied, and never reach the disk', () => {
+  assert.equal(folderPath(' Magnets / Oval/ '), 'Magnets/Oval');
+  assert.equal(folderPath(''), '');
+  assert.equal(folderPath(null), '');
+  assert.throws(() => folderPath('a/../b'), /Invalid/);
+  assert.throws(() => folderPath('1/2/3/4/5/6'), /5 levels/);
+});
+
+test('folders list their parents, and empty ones survive a restart', async () => {
+  const { dir, lib, add, done } = await setup();
+  try {
+    await add('a.gcode', { folder: 'Magnets/Oval' });
+    lib.addFolder('Gifts');
+    assert.deepEqual(lib.folders(), ['Gifts', 'Magnets', 'Magnets/Oval']);
+    assert.deepEqual(new Library(dir).folders(), ['Gifts', 'Magnets', 'Magnets/Oval']);
+  } finally { done(); }
+});
+
+test('renaming a folder carries its files and subfolders', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('a.gcode', { folder: 'Magnets' });
+    const b = await add('b.gcode', { folder: 'Magnets/Oval' });
+    const c = await add('c.gcode', { folder: 'Magnets2' });
+    lib.addFolder('Magnets/Empty');
+    lib.renameFolder('Magnets', 'Parts/Mags');
+    assert.equal(lib.get(a.id).folder, 'Parts/Mags');
+    assert.equal(lib.get(b.id).folder, 'Parts/Mags/Oval');
+    assert.equal(lib.get(c.id).folder, 'Magnets2', 'a similar name is another folder');
+    assert.deepEqual(lib.folders(), ['Magnets2', 'Parts', 'Parts/Mags', 'Parts/Mags/Empty', 'Parts/Mags/Oval']);
+    assert.throws(() => lib.renameFolder('Parts', 'Parts/Mags/Inner'), /inside itself/);
+    assert.throws(() => lib.renameFolder('Nope', 'X'), /Unknown/);
+    assert.throws(() => lib.renameFolder('Parts', 'a/b/c/d'), /5 levels/);
+  } finally { done(); }
+});
+
+test('removing a folder keeps its files, a level up', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('a.gcode', { folder: 'A/B' });
+    const b = await add('b.gcode', { folder: 'A/B/C' });
+    const top = await add('c.gcode', { folder: 'Top' });
+    lib.removeFolder('A/B');
+    assert.equal(lib.get(a.id).folder, 'A');
+    assert.equal(lib.get(b.id).folder, 'A/C');
+    lib.removeFolder('Top');
+    assert.equal(lib.get(top.id).folder, undefined);
+    assert.ok(fs.existsSync(lib.filePath(lib.get(top.id))));
+    assert.deepEqual(lib.folders(), ['A', 'A/C']);
+  } finally { done(); }
+});
+
+test('deleting the last file leaves its folder', async () => {
+  const { lib, add, done } = await setup();
+  try {
+    const a = await add('a.gcode', { folder: 'Magnets' });
+    lib.remove(a.id);
+    assert.deepEqual(lib.folders(), ['Magnets']);
+  } finally { done(); }
+});
+
+test('a renamed file keeps its items per plate', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'library-'));
+  try {
+    const log = new JobLog(dir);
+    log.defaults['rim'] = 9;
+    log.renamedFile('rim.gcode', 'oval rim.gcode');
+    assert.equal(log.defaults['oval rim'], 9);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

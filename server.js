@@ -12,7 +12,7 @@ const { PrusaLinkDriver } = require('./drivers/prusalink');
 const { PrinterStore } = require('./lib/printers');
 const { Timelapses } = require('./lib/timelapse');
 const { JobLog, planFilamentUse } = require('./lib/jobs');
-const { Library, folderPath } = require('./lib/library');
+const { Library, folderPath, projectFilaments } = require('./lib/library');
 const { checkFile } = require('./lib/compat');
 const { SpoolStore } = require('./lib/spools');
 const { AuthStore, allowed } = require('./lib/auth');
@@ -183,6 +183,13 @@ jobs.on('job', (job) => {
 jobs.on('reset', () => { broadcast('jobs', jobs.list()); broadcast('spools', spools.list()); });
 spools.on('change', () => broadcast('spools', spools.list()));
 
+// Printers may report 0 g per color; a file the hub sliced knows the real figures.
+function withLibraryGrams(file, colors) {
+  const known = library.findByName(file)?.colors;
+  if (!known || !colors) return colors;
+  return colors.map((c) => ({ ...c, grams: c.grams || known.find((k) => k.index === c.index)?.grams || 0 }));
+}
+
 // Works out how many grams a new job will take from each slot, best source first:
 // 1. what the hub knew when it started the print (file colors + chosen slots),
 // 2. the file's per-color weights as the printer reports them (slots guessed),
@@ -200,7 +207,7 @@ async function planFilament(job, phase) {
   if (ls && ls.file === job.file && Date.now() - ls.at < 30 * 60 * 1000 && ls.perSlot?.length) colors = ls.perSlot;
   if (!colors && multi) {
     try {
-      colors = (await p.printOptions(job.file)).colors;
+      colors = withLibraryGrams(job.file, (await p.printOptions(job.file)).colors);
     } catch { /* file details unavailable */ }
   }
   const plan = planFilamentUse(colors, library.findByName(job.file)?.grams ?? p.state.job?.grams, multi);
@@ -285,6 +292,7 @@ async function sliceModel(item, printer, body) {
     orient: !!body.orient,
     bedType: body.bedType,
     options: body.options || {},
+    projectFilaments: /\.3mf$/i.test(item.name) ? projectFilaments(library.filePath(item)) : [],
     paintInfo: printer.cfg.type === 'anycubic',
   }, 25 * 60 * 1000);
   try {
@@ -300,6 +308,7 @@ async function sliceModel(item, printer, body) {
       slicedFor: printer.state.id,
       sliceSettings: { process: body.process, filament: body.filament, bedType: result.stats.bedType, options: body.options || {} },
       grams: result.stats.grams,
+      colors: result.stats.colors,
       estimate: result.stats.time,
       bedType: result.stats.bedType,
       bedTemp: result.stats.bedTemp,
@@ -506,7 +515,7 @@ const ACTIONS = {
     return (async () => {
       // Remember grams per slot for this start so the job can charge the right rolls.
       const opts = await p.printOptions(String(body.file)).catch(() => null);
-      const perSlot = opts?.colors?.map((c) => ({ slot: body.mapping?.[c.index] != null ? Number(body.mapping[c.index]) : c.slot, grams: c.grams || 0 })) ?? null;
+      const perSlot = withLibraryGrams(String(body.file), opts?.colors)?.map((c) => ({ slot: body.mapping?.[c.index] != null ? Number(body.mapping[c.index]) : c.slot, grams: c.grams || 0 })) ?? null;
       p.hubStart = { file: String(body.file), at: Date.now(), perSlot };
       return p.startPrint(String(body.file), { mapping: body.mapping, autoLevel: body.autoLevel });
     })();
@@ -698,6 +707,9 @@ const server = http.createServer(async (req, res) => {
         return json(res, 404, { error: 'Not found' });
       }
       const item = library.get(parts[2]);
+      if (parts[3] === 'project' && req.method === 'GET') {
+        return json(res, 200, /\.3mf$/i.test(item.name) ? projectFilaments(library.filePath(item)) : []);
+      }
       if (parts[3] === 'thumb' && req.method === 'POST') {
         const chunks = [];
         let size = 0;

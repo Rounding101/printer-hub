@@ -157,8 +157,10 @@ const Files = (() => {
     body.replaceChildren();
     const selects = new Map();
     if (opts.colors.length) {
-      const h = Object.assign(document.createElement('p'), { className: 'pd-section', textContent: 'Filament for each color' });
+      const many = opts.colors.length > 1;
+      const h = Object.assign(document.createElement('p'), { className: 'pd-section', textContent: many ? `Check these ${opts.colors.length} colors` : 'Filament for each color' });
       body.append(h);
+      if (many) body.append(Object.assign(document.createElement('p'), { className: 'dlg-hint', textContent: 'Each color prints from the slot beside it. Check they match what is loaded.' }));
       for (const c of opts.colors) {
         const row = document.createElement('div');
         row.className = 'map-row';
@@ -172,17 +174,33 @@ const Files = (() => {
           sel.add(o);
         }
         if (c.slot == null) sel.add(new Option('Pick a slot', '', true, true), 0);
+        const note = Object.assign(document.createElement('p'), { className: 'map-note', hidden: true });
         const paintSlot = () => {
           const s = opts.slots.find((x) => String(x.index) === sel.value);
           row.children[3].style.background = s ? rgb(s.color) : 'transparent';
           sel.classList.toggle('warn', !!s && !s.ready);
+          // Only a clear difference: printers report colors loosely.
+          const far = s && c.color.reduce((n, v, i) => n + (v - (s.color[i] ?? 0)) ** 2, 0) > 120 ** 2;
+          const base = (t) => String(t || '').split(/\s+/)[0].toUpperCase();
+          const problems = s ? [!s.ready && 'this slot is empty', c.material && s.type && !base(s.type).includes(base(c.material)) && !base(c.material).includes(base(s.type)) && `this slot has ${s.type}, the file wants ${c.material}`, far && 'this slot looks like a different color'].filter(Boolean) : [];
+          note.textContent = problems.length ? `Color ${c.index + 1}: ${problems.join('; ')}.` : '';
+          note.hidden = !problems.length;
         };
-        sel.onchange = () => { paintSlot(); validate(); };
+        sel.onchange = () => { paintSlot(); if (colorsOk) colorsOk.checked = false; validate(); };
         paintSlot();
         row.append(sel);
-        body.append(row);
+        body.append(row, note);
         selects.set(c.index, sel);
       }
+    }
+    // A multicolor print wastes a lot if a color is wrong, so it needs a yes.
+    let colorsOk = null;
+    if (opts.colors.length > 1) {
+      const label = document.createElement('label');
+      label.className = 'check pd-colors-ok';
+      colorsOk = Object.assign(document.createElement('input'), { type: 'checkbox', onchange: () => validate() });
+      label.append(colorsOk, ' I checked the colors and slots');
+      body.append(label);
     }
     const checks = new Map();
     for (const o of opts.options) {
@@ -199,7 +217,7 @@ const Files = (() => {
     body.append(warn);
 
     function validate() {
-      start.disabled = [...selects.values()].some((s) => s.value === '');
+      start.disabled = [...selects.values()].some((s) => s.value === '') || (colorsOk && !colorsOk.checked);
     }
     validate();
 
@@ -320,7 +338,7 @@ const Files = (() => {
 
   function rowExtras(i) {
     const box = Object.assign(document.createElement('span'), { className: 'lib-row-tags' });
-    box.append(...(i.tags || []).map((t) => tagChip(t)));
+    box.append(...colorDots(i), ...(i.tags || []).map((t) => tagChip(t)));
     return box;
   }
 
@@ -468,6 +486,41 @@ const Files = (() => {
     drawNextModelThumb();
   }
 
+  // The picture, large. For files with no 3D preview.
+  function showImage(item) {
+    const source = item.thumb ? item : library.find((s) => s.modelId === item.id && s.thumb);
+    if (!source) return toast(`No preview for ${item.name}`, true);
+    const dlg = $('thumb-dlg');
+    dlg.querySelector('.td-title').textContent = item.name;
+    dlg.querySelector('.td-img').src = `/api/library/${enc(source.id)}/thumb`;
+    dlg.showModal();
+  }
+
+  // A row's picture, as a button that opens its preview.
+  function previewButton(item) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'lib-thumb-btn', title: 'Preview' });
+    b.setAttribute('aria-label', `Preview ${item.name}`);
+    b.append(thumbTile(item));
+    b.onclick = () => (item.kind === 'model' && window.Preview?.supports(item.name) ? window.Preview.open(item) : showImage(item));
+    return b;
+  }
+
+  // A row's name, as a button that starts what the file is for.
+  function nameButton(item, title, run) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'lib-name lib-name-btn', textContent: item.name, title });
+    b.onclick = run;
+    return b;
+  }
+
+  function colorDots(item) {
+    if (!(item.colors?.length > 1)) return [];
+    return item.colors.map((c) => {
+      const dot = Object.assign(document.createElement('span'), { className: 'swatch lib-dot', title: `Color ${c.index + 1} · ${c.material}${c.grams ? ` · ${Math.round(c.grams)} g` : ''}` });
+      dot.style.background = c.color;
+      return dot;
+    });
+  }
+
   function renderLibrary() {
     const body = $('lib-body');
     if (!body) return;
@@ -496,13 +549,17 @@ const Files = (() => {
       const sent = (i.sentTo || []).map(printerName).join(', ');
       const model = i.modelId && library.find((m) => m.id === i.modelId);
       // Preview from the file (the hub's slicer, the slicer that made it, or drawn from its toolpaths).
-      const thumb = thumbTile(i);
+      const thumb = previewButton(i);
+      let print;
       const text = Object.assign(document.createElement('span'), { className: 'lib-text' });
       const row = Object.assign(document.createElement('div'), { className: 'lib-row' });
       row.append(thumb, text);
       name.append(row);
       text.append(
-        Object.assign(document.createElement('span'), { className: 'lib-name', textContent: i.name }),
+        nameButton(i, 'Print this file', () => {
+          if (print.disabled) toast(print.title || 'This file can\u2019t be printed right now', true);
+          else print.click();
+        }),
         Object.assign(document.createElement('span'), {
           className: 'lib-sub',
           textContent: [
@@ -539,7 +596,7 @@ const Files = (() => {
       const match = printers.find((p) => fit(p.id).ok && !fit(p.id).unknown) || suggestPrinter(i) || printers.find((p) => fit(p.id).ok);
       if (match) sel.value = match.id;
       const send = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Send' });
-      const print = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small primary', textContent: 'Print…' });
+      print = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small primary', textContent: 'Print…' });
       const sync = () => {
         const p = cards.get(sel.value)?.state;
         const f = fit(sel.value);
@@ -604,10 +661,13 @@ const Files = (() => {
       name.className = 'item lib-item';
       const text = Object.assign(document.createElement('span'), { className: 'lib-text' });
       const modelRow = Object.assign(document.createElement('div'), { className: 'lib-row' });
-      modelRow.append(thumbTile(m), text);
+      modelRow.append(previewButton(m), text);
       name.append(modelRow);
       text.append(
-        Object.assign(document.createElement('span'), { className: 'lib-name', textContent: m.name }),
+        nameButton(m, 'Slice this model', () => {
+          if (slicer.available) openSlice(m);
+          else toast('The slicer service is not running', true);
+        }),
         Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [libFolder === '' && m.folder, `Added ${new Date(m.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`].filter(Boolean).join(' · ') }),
         rowExtras(m),
       );
@@ -664,6 +724,7 @@ const Files = (() => {
     const go = dlg.querySelector('.sd-go');
     dlg.querySelector('.sd-model').textContent = model.name;
     dlg.querySelector('.sd-fields').hidden = false;
+    dlg.querySelector('.sd-project').hidden = true;
     status.hidden = true;
     go.hidden = false;
     go.disabled = false;
@@ -704,6 +765,7 @@ const Files = (() => {
       }
       const vase = f.vase.checked;
       for (const key of VASE_OFF) f[key].disabled = vase;
+      if (!dlg.querySelector('.sd-project').hidden) f.copies.disabled = true;
       if (!vase) {
         f.supportAngle.disabled = f.supports.value === 'off';
         f.supportWhere.disabled = f.supports.value === 'off';
@@ -747,6 +809,30 @@ const Files = (() => {
     f.printerId.onchange = loadProfiles;
     dlg.showModal();
     await loadProfiles();
+
+    // A slicer project brings its own colors, so there's no one filament to pick.
+    const box = dlg.querySelector('.sd-project');
+    const pick = dlg.querySelector('.sd-filament-pick');
+    box.hidden = true;
+    pick.hidden = false;
+    let projectColors = [];
+    if (/\.3mf$/i.test(model.name)) {
+      projectColors = await api(`/api/library/${enc(model.id)}/project`).catch(() => []);
+      if (projectColors.length) {
+        dlg.querySelector('.sd-project-colors').replaceChildren(...projectColors.map((c) => {
+          const el = Object.assign(document.createElement('span'), { className: 'sd-color', title: c.preset || '' });
+          const dot = Object.assign(document.createElement('span'), { className: 'swatch' });
+          dot.style.background = c.color;
+          el.append(dot, `${c.index + 1} · ${c.type || 'Filament'}`);
+          return el;
+        }));
+        box.hidden = false;
+        pick.hidden = true;
+        f.copies.value = 1;
+        f.vase.checked = false;
+        syncMore();
+      }
+    }
 
     go.onclick = async () => {
       if (!f.process.value || !f.filament.value) return;
@@ -794,7 +880,7 @@ const Files = (() => {
         status.className = 'sd-status ok';
         status.replaceChildren(
           Object.assign(document.createElement('strong'), { textContent: 'Sliced' }),
-          document.createTextNode(` ${[item.estimate, item.grams && `${Math.round(item.grams)} g`, `${item.copies} ${item.copies === 1 ? 'copy' : 'copies'}`].filter(Boolean).join(' · ')}`),
+          document.createTextNode(` ${[item.estimate, item.grams && `${Math.round(item.grams)} g`, `${item.copies} ${item.copies === 1 ? 'copy' : 'copies'}`, item.colors?.length > 1 && `${item.colors.length} colors`].filter(Boolean).join(' · ')}`),
           Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [item.bedTemp != null && `Bed ${item.bedTemp}°C`, item.nozzleTemp && `nozzle ${item.nozzleTemp}°C`, item.bedType].filter(Boolean).join(' · ') }),
           Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: item.name }),
         );
@@ -867,5 +953,5 @@ const Files = (() => {
   function setLibrary(items) { library = items; renderLibrary(); }
   function setFolders(list) { folders = list; renderLibrary(); }
 
-  return { openPrinterFiles, openPrint, setLibrary, setFolders, renderLibrary, uploadToPrinter };
+  return { openPrinterFiles, openPrint, setLibrary, setFolders, renderLibrary, uploadToPrinter, showImage };
 })();

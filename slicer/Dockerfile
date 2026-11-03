@@ -81,11 +81,11 @@ RUN for i in 1 2 3 4; do \
     && /opt/step2stl/step2stl /opt/step2stl/test.step /tmp/test.stl && rm /tmp/test.stl
 
 WORKDIR /app
-COPY options.js profiles.js server.js selftest.js thumbnail.js ./
+COPY colors.js options.js profiles.js project-fixture.js server.js selftest.js thumbnail.js ./
 
 # Fail the build now if Orca can't actually slice for either printer, or a STEP part.
 RUN DATA_DIR=/tmp/selftest-data ORCA_HOME=/tmp/selftest-home node selftest.js \
-    && rm -rf /tmp/selftest-home
+    && rm -rf /tmp/selftest-home /tmp/orcaslicer_model
 
 # ubuntu:24.04 ships uid 1000 "ubuntu", matching the hub's "node" user so both
 # can read and write the shared /data volume.

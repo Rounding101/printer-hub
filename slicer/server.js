@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { ProfileStore } = require('./profiles');
 const { applyOptions } = require('./options');
+const { usedColors, projectFilamentPresets } = require('./colors');
 const { addThumbnails } = require('./thumbnail');
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -73,6 +74,7 @@ function gcodeStats(file) {
     layers: Number(pick(/; total layer(?:s count| number)\s*[:=]\s*(\d+)/)) || null,
     material: pick(/; filament_type = (.+)/),
     color: pick(/; filament_colour = (.+)/),
+    gramsPerFilament: pick(/; filament used \[g\] = (.+)/),
     bedType: pick(/; curr_bed_type = (.+)/),
     bedTemp: Number(pick(/; first_layer_bed_temperature = (\d+)/)) || 0,
     nozzleTemp: Number(pick(/; first_layer_temperature = (\d+)/)) || 0,
@@ -82,12 +84,12 @@ function gcodeStats(file) {
 // Anycubic Slicer Next writes a "; paint_info" line that the Kobra X reads to
 // report a file's colors; Orca doesn't, so add an equivalent one.
 function injectPaintInfo(file, stats) {
-  const info = [{
-    paint_index: 0,
-    paint_color: rgbFromHex(stats.color),
-    material_type: String(stats.material || 'PLA').split(';')[0],
-    filament_used: stats.grams || 0,
-  }];
+  const info = usedColors(stats).map((c) => ({
+    paint_index: c.index,
+    paint_color: rgbFromHex(c.color),
+    material_type: c.material,
+    filament_used: c.grams,
+  }));
   const line = `; paint_info = ${JSON.stringify(info)}\n`;
   const data = fs.readFileSync(file);
   const marker = data.indexOf('; HEADER_BLOCK_END');
@@ -97,7 +99,11 @@ function injectPaintInfo(file, stats) {
 
 function run(bin, args, cwd) {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, HOME: ORCA_HOME, XDG_CONFIG_HOME: path.join(ORCA_HOME, '.config') };
+    // Orca unpacks projects into its temp folder, so give each run its own: this
+    // user can always write there, and it goes away with the slice.
+    const tmp = path.join(cwd, 'tmp');
+    fs.mkdirSync(tmp, { recursive: true });
+    const env = { ...process.env, HOME: ORCA_HOME, XDG_CONFIG_HOME: path.join(ORCA_HOME, '.config'), TMPDIR: tmp, TMP: tmp, TEMP: tmp };
     const child = spawn(bin, args, { cwd, env });
     let out = '';
     const keep = (c) => { out += c; if (out.length > 200000) out = out.slice(-100000); };
@@ -135,7 +141,14 @@ async function slice(req) {
     const write = (name, cfg) => { const p = path.join(dir, name); fs.writeFileSync(p, JSON.stringify(cfg)); return p; };
     const m = write('machine.json', machineCfg);
     const p = write('process.json', processCfg);
-    const f = write('filament.json', filamentCfg);
+    // A project keeps its own filaments and colors; anything else uses the one picked.
+    const filaments = req.projectFilaments?.length
+      ? projectFilamentPresets(req.projectFilaments, store.compatible(vendor, 'filament', machine), req.filament).map((p, i) => {
+        const cfg = store.resolve(vendor, 'filament', p.preset);
+        if (p.color) cfg.filament_colour = [p.color];
+        return write(`filament_${i}.json`, cfg);
+      })
+      : [write('filament.json', filamentCfg)];
 
     // Orca reads STEP only in its GUI, not the CLI, so mesh it to STL first.
     let model = input;
@@ -154,13 +167,14 @@ async function slice(req) {
     // and arranging gives the same result.
     const copies = Math.max(1, Math.min(64, Math.round(Number(req.copies) || 1)));
     if (req.options?.vase && copies > 1) throw new Error('Vase mode prints one model at a time. Set copies to 1.');
+    if (req.projectFilaments?.length && copies > 1) throw new Error('A project file prints the plate as it was saved. Set copies to 1, or add the copies in your slicer.');
     const args = [
       '--datadir', path.join(ORCA_HOME, 'data'),
       '--slice', '0',
       '--arrange', '1',
       ...(req.orient ? ['--orient', '1'] : []),
       '--load-settings', `${m};${p}`,
-      '--load-filaments', f,
+      '--load-filaments', filaments.join(';'),
       '--outputdir', dir,
       ...Array(copies).fill(model),
     ];
@@ -179,7 +193,7 @@ async function slice(req) {
     // Preview images for the printer's screen, in the sizes its profile asks for.
     let thumbnail = false;
     try { thumbnail = !!addThumbnails(file, machineCfg); } catch (err) { console.warn(`Thumbnail skipped: ${err.message}`); }
-    return { id, output: file, seconds: Math.round((Date.now() - t0) / 1000), copies, stats, thumbnail };
+    return { id, output: file, seconds: Math.round((Date.now() - t0) / 1000), copies, stats: { ...stats, colors: usedColors(stats) }, thumbnail };
   } catch (err) {
     fs.rmSync(dir, { recursive: true, force: true });
     throw err;

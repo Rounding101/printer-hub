@@ -34,6 +34,13 @@ jobs:
           res=$(curl -s -X POST localhost:8080/slice -d "$(echo "$body" | jq '.input = "/data/models/broken.step"')"); echo "broken: $res"
           echo "$res" | jq -e '.error | test("^Couldn.t convert the STEP file: the file couldn.t be read$")'
           docker logs slicer | tail -5
+      - name: A project .3mf slices as the user the container runs as
+        run: |
+          docker exec slicer node project-fixture.js /data/models/project.3mf
+          prof=$(curl -sfG localhost:8080/profiles --data-urlencode "vendor=Anycubic" --data-urlencode "machine=Anycubic Kobra X 0.4 nozzle")
+          body=$(jq -n --argjson p "$prof" '{input:"/data/models/project.3mf", vendor:"Anycubic", machine:"Anycubic Kobra X 0.4 nozzle", process:$p.defaults.process, filament:$p.defaults.filament, paintInfo:true}')
+          res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$res"
+          echo "$res" | jq -e '.stats.layers > 10'
       - name: Any printer - profile list, shared filament library, plate choice
         run: |
           curl -sf localhost:8080/machines | jq -e 'length > 50 and (map(.vendor) | index("Custom") != null)'

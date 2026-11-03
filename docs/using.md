@@ -84,6 +84,8 @@ MQTT `axis/move`, `axis/turnOff`, `tempature/set`, `fan/setSpeed` and
   up to 150 MB, and with the 3D preview in your browser for STL, OBJ and 3MF models
   up to 100 MB. A STEP model uses the picture of its latest slice. Anything else
   shows its file type.
+- **Clicking a file:** the picture opens a preview, and the name starts the job:
+  **Print…** for a print file, **Slice…** for a model.
 - **Rename, tag and move:** the ✎ button on a file changes its name, folder and
   tags. The extension stays. A printer keeps any copy it already has under the
   old name, and the next **Send** or **Print…** uploads the new name. Prints
@@ -158,7 +160,14 @@ printer must be idle to receive files.
   one Kobra X profile value the command-line tool rejects (cut retraction 0,
   while that feature is off). When building from source, set a different Orca
   version with the `ORCA_VERSION` build argument.
-- Multi-color painting and placing parts by hand still need a desktop slicer.
+- **Slicer projects:** a `.3mf` saved by Anycubic Slicer Next, Bambu Studio or
+  Orca keeps its colors and which part uses which. The dialog shows them instead
+  of a filament choice, and each uses the same material's profile for this printer.
+  Copies stay at 1, as the plate prints as it was saved.
+- **Checking colors:** when a file uses two or more colors, the print dialog lists
+  each with the slot it'll print from, warns if a slot looks wrong, and needs a
+  tick before printing. Filament is charged to the slots you choose.
+- Painting colors onto a model and placing parts by hand still need a desktop slicer.
 
 ## Timelapses
 

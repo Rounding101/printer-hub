@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { slice } = require('./server');
+const { projectFixture, FILAMENTS } = require('./project-fixture');
 
 const TARGETS = [
   { vendor: 'Anycubic', machine: 'Anycubic Kobra X 0.4 nozzle', paintInfo: true },
@@ -57,6 +58,18 @@ function cubeStl(size = 20) {
     }
   }
   console.log('selftest ok: slice settings reach the G-code');
+
+  // A project .3mf keeps its filaments and colors, and the Kobra X is told each one used.
+  const project = path.join(dataDir, 'selftest', 'project.3mf');
+  fs.writeFileSync(project, projectFixture(store));
+  const pr = await slice({ ...base, input: project, projectFilaments: FILAMENTS });
+  const used = pr.stats.colors.map((c) => `${c.index}:${c.color}`).join(' ');
+  if (used !== '1:#F1F0ED 2:#EF60A3') throw new Error(`project colors came through as ${used}`);
+  const paint = /^; paint_info = (.*)$/m.exec(fs.readFileSync(pr.output, 'latin1'));
+  if (!paint || JSON.parse(paint[1]).map((p) => p.paint_index).join() !== '1,2') throw new Error(`paint_info is ${paint && paint[1]}`);
+  console.log(`selftest ok: project .3mf -> ${used}`);
+
+  if (process.env.SKIP_STEP) { fs.rmSync(dataDir, { recursive: true, force: true }); return; }
 
   // STEP goes through the OpenCASCADE converter. The test part is 12 mm tall,
   // so ~60 layers at 0.2 mm proves the units came through as millimetres.

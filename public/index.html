@@ -313,6 +313,14 @@
     </form>
   </dialog>
 
+  <dialog id="thumb-dlg">
+    <form method="dialog" class="dlg">
+      <h3 class="td-title"></h3>
+      <img class="td-img" alt="">
+      <div class="dlg-actions"><button class="btn ghost" value="close">Close</button></div>
+    </form>
+  </dialog>
+
   <dialog id="print-dlg">
     <form method="dialog" class="dlg">
       <h3>Print on <span class="pd-printer"></span></h3>
@@ -414,8 +422,13 @@
           <label>Quality <select name="process"></select></label>
         </div>
         <div class="form-row">
-          <label>Filament <select name="filament"></select></label>
+          <label class="sd-filament-pick">Filament <select name="filament"></select></label>
           <label>Build plate <select name="bedType"></select></label>
+        </div>
+        <div class="sd-project" hidden>
+          <p class="pd-section">Colors from this project</p>
+          <div class="sd-project-colors"></div>
+          <p class="dlg-hint">The file's colors and part assignments are kept. You'll match them to your slots when you print.</p>
         </div>
         <div class="form-row">
           <label>Copies on the plate <input name="copies" type="number" min="1" max="64" value="1"></label>

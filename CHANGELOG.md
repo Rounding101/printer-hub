@@ -3,6 +3,22 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.21.0 — 2026-11-03
+
+### Fixed
+- **Slicer project .3mf files slice again.** They failed with
+  `basic_ios::clear: iostream error` because of a temp folder the slicer couldn't
+  write to.
+- **Multicolor prints tell the printer every color used.** Before, a sliced file
+  always reported one color, however many it printed with.
+
+### Added
+- **Project colors carry through slicing,** with each part keeping its color.
+- **Color check when printing:** files with two or more colors list each color
+  and its slot, warn about likely mismatches, and need a tick before starting.
+- **Filament is charged per color** for files the hub sliced.
+- **Clicking a file:** the picture opens a preview, and the name starts Print or Slice.
+
 ## 0.20.0 — 2026-11-02
 
 ### Added

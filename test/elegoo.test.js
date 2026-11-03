@@ -57,7 +57,8 @@ async function fakeCentauri({ code = '123456', clientLimit = false } = {}) {
   };
 
   const results = {
-    1001: () => ({ error_code: 0, machine_model: 'Centauri Carbon 2', software_version: '02.01.00.00', sn: SN }),
+    // Shape as reported by a real CC2 on firmware 02.01.01.07.
+    1001: () => ({ error_code: 0, machine_model: 'Centauri Carbon 2', software_version: { mcu_version: '00.00.00.00', ota_version: '02.01.01.07', soc_version: '' }, sn: SN }),
     1002: () => ({ error_code: 0, ...JSON.parse(JSON.stringify(p.status)) }),
     1020: (params) => {
       Object.assign(p.status.machine_status, { status: 2, sub_status: 2075, progress: 10 });
@@ -144,7 +145,7 @@ test('Elegoo CC2: connects, reports status, files, prints, controls, uploads', a
     let s = await waitFor(d, (x) => x.online && x.firmware);
     assert.equal(s.status, 'idle');
     assert.equal(s.model, 'Centauri Carbon 2');
-    assert.equal(s.firmware, '02.01.00.00');
+    assert.equal(s.firmware, '02.01.01.07');
     assert.deepEqual(s.temps.nozzle, { cur: 33, target: 0 });
     assert.deepEqual(s.temps.chamber, { cur: 27, target: 0 });
     assert.equal(s.fans.part, 50);

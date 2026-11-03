@@ -91,6 +91,13 @@ function slotsFrom(canvas) {
   })));
 }
 
+// A string on older firmware; on 02.01.01.07 an object such as
+// { mcu_version: '00.00.00.00', ota_version: '02.01.01.07', soc_version: '' }.
+function firmwareOf(v) {
+  if (isObj(v)) return v.ota_version || v.soc_version || null;
+  return v || null;
+}
+
 function mapStatus(s) {
   const ms = s.machine_status || {};
   const exc = (ms.exception_status || []).find((c) => CRITICAL.has(c));
@@ -357,7 +364,7 @@ class ElegooDriver extends PrinterDriver {
       status,
       error: error || null,
       model: this.attrs.machine_model || 'Centauri Carbon 2',
-      firmware: this.attrs.software_version || null,
+      firmware: firmwareOf(this.attrs.software_version),
       camera: this.cameraUrl() ? 'mjpeg' : null,
       light: s.led ? s.led.status === 1 : null,
       temps: {

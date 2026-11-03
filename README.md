@@ -123,9 +123,11 @@ Your printers, accounts and history are kept.
 
 ¹ Pause, resume and cancel; PrusaLink has no manual-control API. ² Prusa
 printers have no local camera stream, but you can add any MJPEG camera URL.
-³ Status, files and the light are tested on a real printer (firmware
-02.01.01.07). Starting prints, the camera in the hub, uploads and manual control
-are tested against a simulated printer only.
+³ Tested on a real printer (firmware 02.01.01.07): status, files, light,
+camera stream, uploads, starting and cancelling a print, and the part fan.
+Pausing and resuming mid-print, a print running to the end, multi-color tray
+choice and the other manual controls are tested against a simulated printer
+only.
 
 Slicing covers about **1,000 printer profiles from 64 brands** (everything
 OrcaSlicer ships), and generic Klipper/Marlin profiles for anything else.

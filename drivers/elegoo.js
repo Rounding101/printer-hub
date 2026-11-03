@@ -448,7 +448,12 @@ class ElegooDriver extends PrinterDriver {
     return this.slots;
   }
 
-  async pause() { await this.command(METHOD.PAUSE, {}, (s) => ['pausing', 'paused'].includes(s.status), 'pause'); }
+  async pause() {
+    // Seen on 02.01.01.07: a pause sent while preheating isn't answered, and the
+    // printer carries it out minutes later. Refuse it rather than leave one pending.
+    if (this.state.status === 'heating') throw new Error('The printer can’t pause while it heats up for a print. Pause once it’s printing, or cancel.');
+    await this.command(METHOD.PAUSE, {}, (s) => ['pausing', 'paused'].includes(s.status), 'pause');
+  }
   async resume() { await this.command(METHOD.RESUME, {}, (s) => ['printing', 'heating'].includes(s.status), 'resume'); }
   async cancel() { await this.command(METHOD.STOP, {}, (s) => ['cancelling', 'idle'].includes(s.status), 'cancel'); }
 
@@ -558,6 +563,8 @@ class ElegooDriver extends PrinterDriver {
         body: data.subarray(start, end),
         signal: AbortSignal.timeout(60000),
       });
+      // Uploads check the access code (a wrong or missing X-Token is HTTP 401).
+      if (res.status === 401) throw new Error('The printer refused the access code for the upload');
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body.error_code) throw new Error(`Printer rejected the upload (${body.error_code ? `error ${body.error_code}` : `HTTP ${res.status}`})`);
       if (end >= data.length) break;

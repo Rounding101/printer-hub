@@ -108,7 +108,11 @@ stays on the tray the print started from.
 
 **Pause, resume and cancel** count as done when the printer answers or its
 status changes to match. If neither happens within 15 seconds, the hub says the
-command wasn't confirmed instead of reporting success.
+command wasn't confirmed instead of reporting success. Pausing isn't offered
+while the printer heats up for a print: the printer holds such a pause and
+carries it out minutes later. Cancel works at any time.
+
+Uploads use the access code too; with a wrong one the printer refuses them.
 
 ### Network
 

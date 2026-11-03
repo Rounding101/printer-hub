@@ -41,6 +41,7 @@ async function fakeCentauri({ code = '123456', clientLimit = false, silent = [] 
       return res.end(JSON.stringify({ error_code: 0, system_info: { sn: SN } }));
     }
     if (url.pathname === '/upload' && req.method === 'PUT') {
+      if (req.headers['x-token'] !== code) { req.resume(); res.writeHead(401); return res.end('<html>401 Unauthorized</html>'); }
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
@@ -255,6 +256,13 @@ test('Elegoo CC2: status codes map to hub statuses', () => {
   assert.equal(st({ status: 2, sub_status: 2503 }), 'cancelling');
   assert.equal(st({ status: 1, sub_status: 2077 }), 'completed');
   assert.equal(st({ status: 1 }, { state: 'complete' }), 'completed');
+  // Seen on a real CC2 (02.01.01.07) while uploading, then cancelling a print.
+  assert.deepEqual(mapStatus({ machine_status: { status: 11, sub_status: 3000 } }), { status: 'busy', stage: 'Transferring file' });
+  assert.equal(st({ status: 2, sub_status: 1405 }, { state: 'printing' }), 'heating');
+  assert.equal(st({ status: 2, sub_status: 2502 }, { state: 'printing' }), 'paused');
+  assert.equal(st({ status: 2, sub_status: 2503 }, { state: 'cancelled' }), 'cancelling');
+  assert.equal(st({ status: 2, sub_status: 2504 }, { state: 'cancelled' }), 'idle');
+  assert.equal(st({ status: 1, sub_status: 0 }, { state: 'cancelled' }), 'idle');
   assert.equal(st({ status: 10 }), 'busy');
   assert.equal(st({ status: 14 }), 'error');
   assert.deepEqual(mapStatus({ machine_status: { status: 2, exception_status: [103] } }), { status: 'error', error: 'Nozzle heating failed' });
@@ -363,6 +371,27 @@ test('Elegoo CC2: cancel skips queued requests and is not confirmed when nothing
     late.p.push({ machine_status: { status: 2, sub_status: 2502 }, print_status: { filename: 'cube.gcode' } });
     await p;
   }, { confirmMs: 1000 });
+});
+
+// Found on a real CC2 (02.01.01.07): a pause while preheating is held and
+// carried out minutes later, so it's refused; uploads need the access code.
+test('Elegoo CC2: no pause while heating, and an upload with a wrong code is explained', async () => {
+  const fake = await fakeCentauri({ code: 'right' });
+  Object.assign(fake.p.status.machine_status, { status: 2, sub_status: 1405 });
+  fake.p.status.print_status.filename = 'cube.gcode';
+  await withDriver(fake, { accessCode: 'right' }, async (d) => {
+    await waitFor(d, (x) => x.status === 'heating');
+    await assert.rejects(d.pause(), /heats up/);
+    assert.equal(fake.p.requests.filter((r) => r.method === 1021).length, 0);
+    await d.cancel(); // cancel still works while heating
+  });
+
+  const fake2 = await fakeCentauri({ code: 'right' });
+  await withDriver(fake2, { accessCode: 'right' }, async (d) => {
+    await waitFor(d, (x) => x.online);
+    d.cfg.accessCode = 'changed-on-the-printer';
+    await assert.rejects(d.upload('a.gcode', Buffer.from('G28\n')), /refused the access code/);
+  });
 });
 
 // Review 5: slicing works without picking a profile first.

@@ -51,6 +51,7 @@ const dataDir = process.env.DATA_DIR || config.dataDir
   : path.join(__dirname, path.basename(configPath) === 'config.json' ? 'data' : `data-${path.basename(configPath, '.json').replace(/^config\.?/, '') || 'alt'}`);
 const jobs = new JobLog(dataDir);
 const library = new Library(dataDir);
+library.startThumbs();
 const spools = new SpoolStore(dataDir, jobs);
 const auth = new AuthStore(dataDir);
 const printerStore = new PrinterStore(dataDir, DRIVERS, config.printers || []);
@@ -694,6 +695,17 @@ const server = http.createServer(async (req, res) => {
         return json(res, 404, { error: 'Not found' });
       }
       const item = library.get(parts[2]);
+      if (parts[3] === 'thumb' && req.method === 'POST') {
+        const chunks = [];
+        let size = 0;
+        for await (const c of req) {
+          size += c.length;
+          if (size > 4 * 1024 * 1024) throw new Error('Preview is too large');
+          chunks.push(c);
+        }
+        library.setThumb(item.id, Buffer.concat(chunks));
+        return json(res, 200, { ok: true });
+      }
       if (parts[3] === 'thumb' && req.method === 'GET') {
         const p = library.thumbPath(item);
         return p ? sendThumb(res, p) : json(res, 404, { error: 'No preview' });

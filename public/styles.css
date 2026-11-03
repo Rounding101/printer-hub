@@ -293,8 +293,12 @@ select.small { padding: 4px 8px; font-size: 13px; max-width: 150px; }
 .lib-name, .lib-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .lib-text { min-width: 0; }
-.lib-thumb { flex: none; width: 52px; height: 52px; border-radius: 8px; object-fit: contain; background: var(--surface-2); }
-.lib-thumb.empty { display: block; }
+.lib-thumb { flex: none; width: 64px; height: 64px; border-radius: 8px; object-fit: contain; background: var(--surface-2); }
+.lib-thumb.empty { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
+.file-list button:has(.file-thumb) { display: flex; align-items: center; gap: 10px; }
+.file-list .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.file-thumb { flex: none; width: 36px; height: 36px; border-radius: 6px; object-fit: contain; background: var(--surface-2); }
+.file-thumb.empty { display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; color: var(--muted); }
 .lib-sub { font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 
 .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); align-self: flex-end; }

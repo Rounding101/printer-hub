@@ -68,6 +68,8 @@ const Files = (() => {
         b.innerHTML = '<span class="fname"></span><span class="fsize"></span>';
         b.firstChild.textContent = f.name;
         b.lastChild.textContent = f.size ? size(f.size) : '';
+        // A picture if the library has this file; printers don't offer one in their lists.
+        b.prepend(thumbTile(library.find((i) => i.name === f.name || i.previousNames?.includes(f.name)) || { name: f.name }, 'file-thumb'));
         b.onclick = () => { dlg.close(); openPrint(filesFor, f.name); };
         li.append(b);
         return li;
@@ -435,6 +437,37 @@ const Files = (() => {
     ].filter(Boolean).join(', ');
   }
 
+  // A file's picture, or a tile with its type where there's none yet.
+  function thumbTile(item, cls = 'lib-thumb') {
+    const source = item.thumb ? item : item.kind === 'model' ? library.find((s) => s.modelId === item.id && s.thumb) : null;
+    if (source) return Object.assign(document.createElement('img'), { className: cls, src: `/api/library/${enc(source.id)}/thumb`, alt: '', loading: 'lazy' });
+    return Object.assign(document.createElement('span'), { className: `${cls} empty`, textContent: (/\.([^.]+)$/.exec(item.name) || [])[1]?.toUpperCase() || '' });
+  }
+
+  // Models get their picture from the 3D preview in the browser, one at a time,
+  // while the Library is open. Very large ones are left out: they'd stall the page.
+  const MAX_MODEL_THUMB = 100 * 1024 * 1024;
+  const modelThumbsTried = new Set();
+  let drawingModel = false;
+
+  async function drawNextModelThumb() {
+    if (drawingModel || !window.Preview?.thumbnail) return;
+    if (document.querySelector('[data-role="viewer"]') || document.querySelector('.view[data-view="library"]').hidden) return;
+    const m = library.find((i) => i.kind === 'model' && !i.thumb && !modelThumbsTried.has(i.id) && window.Preview.supports(i.name) && i.size <= MAX_MODEL_THUMB);
+    if (!m) return;
+    drawingModel = true;
+    modelThumbsTried.add(m.id);
+    try {
+      const body = await window.Preview.thumbnail(m);
+      const res = await fetch(`/api/library/${enc(m.id)}/thumb`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+    } catch (err) {
+      console.warn(`No preview for ${m.name}: ${err.message}`);
+    }
+    drawingModel = false;
+    drawNextModelThumb();
+  }
+
   function renderLibrary() {
     const body = $('lib-body');
     if (!body) return;
@@ -462,10 +495,8 @@ const Files = (() => {
       const added = new Date(i.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const sent = (i.sentTo || []).map(printerName).join(', ');
       const model = i.modelId && library.find((m) => m.id === i.modelId);
-      // Preview from the file (the hub's slicer, or the slicer that made it), else an empty tile.
-      const thumb = i.thumb
-        ? Object.assign(document.createElement('img'), { className: 'lib-thumb', src: `/api/library/${enc(i.id)}/thumb`, alt: '', loading: 'lazy' })
-        : Object.assign(document.createElement('span'), { className: 'lib-thumb empty' });
+      // Preview from the file (the hub's slicer, the slicer that made it, or drawn from its toolpaths).
+      const thumb = thumbTile(i);
       const text = Object.assign(document.createElement('span'), { className: 'lib-text' });
       const row = Object.assign(document.createElement('div'), { className: 'lib-row' });
       row.append(thumb, text);
@@ -547,6 +578,7 @@ const Files = (() => {
       return tr;
     }));
     $('lib-empty').hidden = items.length > 0;
+    drawNextModelThumb();
   }
 
   // ---- Models -------------------------------------------------------------------
@@ -570,7 +602,11 @@ const Files = (() => {
       const slices = library.filter((i) => i.modelId === m.id);
       const name = document.createElement('td');
       name.className = 'item lib-item';
-      name.append(
+      const text = Object.assign(document.createElement('span'), { className: 'lib-text' });
+      const modelRow = Object.assign(document.createElement('div'), { className: 'lib-row' });
+      modelRow.append(thumbTile(m), text);
+      name.append(modelRow);
+      text.append(
         Object.assign(document.createElement('span'), { className: 'lib-name', textContent: m.name }),
         Object.assign(document.createElement('span'), { className: 'lib-sub', textContent: [libFolder === '' && m.folder, `Added ${new Date(m.addedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`].filter(Boolean).join(' · ') }),
         rowExtras(m),

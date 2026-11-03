@@ -72,6 +72,12 @@ MQTT `axis/move`, `axis/turnOff`, `tempature/set`, `fan/setSpeed` and
   Docker). The hub reads the slicer header to show which printer and material
   each file was sliced for, and suggests a matching printer. **Send** copies the
   file to a printer. **Print…** sends it if needed, then opens the print dialog.
+- **Pictures:** each file shows a small picture, in the library and under
+  **Browse printer files** when the library has that file. It's the preview the
+  slicer put in the file, or else the hub draws one: from the toolpaths for G-code
+  up to 150 MB, and with the 3D preview in your browser for STL, OBJ and 3MF models
+  up to 100 MB. A STEP model uses the picture of its latest slice. Anything else
+  shows its file type.
 - **Rename, tag and move:** the ✎ button on a file changes its name, folder and
   tags. The extension stays. A printer keeps any copy it already has under the
   old name, and the next **Send** or **Print…** uploads the new name. Prints

@@ -190,3 +190,85 @@ test('uploads with the same name are left as they are', async () => {
     assert.equal(b.name, 'a.gcode');
   } finally { done(); }
 });
+
+const zlib = require('node:zlib');
+const PNG_BYTES = Buffer.from('89504e470d0a1a0a00000000', 'hex');
+
+// A minimal zip holding these files, the second one deflated.
+function zipOf(files) {
+  const locals = [];
+  const dir = [];
+  let offset = 0;
+  for (const [name, data, deflate] of files) {
+    const body = deflate ? zlib.deflateRawSync(data) : data;
+    const n = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(deflate ? 8 : 0, 8);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    locals.push(local, n, body);
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt16LE(deflate ? 8 : 0, 10);
+    c.writeUInt32LE(body.length, 20);
+    c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(n.length, 28);
+    c.writeUInt32LE(offset, 42);
+    dir.push(c, n);
+    offset += 30 + n.length + body.length;
+  }
+  const cd = Buffer.concat(dir);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt32LE(cd.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, end]);
+}
+
+test('G-code with no preview gets one drawn from its toolpaths', async () => {
+  const { lib, done } = await setup();
+  try {
+    const moves = ';TYPE:Outer wall\nG1 Z0.2 F600\nG1 X0 Y0\nG1 X20 Y0 E1\nG1 X20 Y20 E2\nG1 X0 Y20 E3\nG1 X0 Y0 E4\n';
+    const a = await lib.addFromStream('plain.gcode', Readable.from([Buffer.from(moves)]));
+    assert.equal(a.thumb, false);
+    const empty = await lib.addFromStream('empty.gcode', Readable.from([Buffer.from('; nothing\n')]));
+    await lib.fillThumbs();
+    assert.equal(lib.get(a.id).thumb, true);
+    assert.equal(fs.readFileSync(lib.thumbPath(lib.get(a.id))).subarray(1, 4).toString(), 'PNG');
+    assert.equal(lib.get(empty.id).thumb, false);
+    assert.equal(lib.get(empty.id).thumbTried, true, 'not tried again');
+    lib.update(a.id, { name: 'renamed' });
+    assert.ok(fs.existsSync(lib.thumbPath(lib.get(a.id))), 'a rename keeps the picture');
+  } finally { done(); }
+});
+
+test('a .3mf uses the picture inside it', async () => {
+  const { lib, done } = await setup();
+  try {
+    const sliced = await lib.addFromStream('plate.3mf', Readable.from([zipOf([['Metadata/plate_1.gcode', Buffer.from('G1'), false], ['Metadata/plate_1.png', PNG_BYTES, true]])]));
+    const model = await lib.addFromStream('project.3mf', Readable.from([zipOf([['3D/3dmodel.model', Buffer.from('<model/>'), false], ['Thumbnails/thumbnail.png', PNG_BYTES, false]])]));
+    const none = await lib.addFromStream('bare.3mf', Readable.from([zipOf([['3D/3dmodel.model', Buffer.from('<x/>'), false]])]));
+    const junk = await lib.addFromStream('junk.3mf', Readable.from([Buffer.from('not a zip at all')]));
+    await lib.fillThumbs();
+    assert.equal(sliced.kind, 'print');
+    assert.equal(model.kind, 'model');
+    assert.deepEqual(fs.readFileSync(lib.thumbPath(lib.get(sliced.id))), PNG_BYTES);
+    assert.deepEqual(fs.readFileSync(lib.thumbPath(lib.get(model.id))), PNG_BYTES);
+    assert.ok(!lib.get(none.id).thumb);
+    assert.ok(!lib.get(junk.id).thumb);
+  } finally { done(); }
+});
+
+test('a model takes a picture from the browser, PNG only', async () => {
+  const { lib, done } = await setup();
+  try {
+    const m = await lib.addFromStream('part.stl', Readable.from([Buffer.from('solid x\nendsolid x\n')]));
+    await lib.fillThumbs();
+    assert.ok(!lib.get(m.id).thumbTried, 'the hub leaves STL to the browser');
+    assert.throws(() => lib.setThumb(m.id, Buffer.from('<svg>')), /PNG/);
+    lib.setThumb(m.id, PNG_BYTES);
+    assert.equal(lib.get(m.id).thumb, true);
+  } finally { done(); }
+});

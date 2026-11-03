@@ -90,4 +90,35 @@ async function open(item) {
   }, { once: true });
 }
 
-window.Preview = { open, supports: (name) => /\.(stl|obj|3mf)$/i.test(name) };
+// A small picture of a model for the library, as a PNG blob.
+async function thumbnail(item) {
+  const size = 300;
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  try {
+    r.setSize(size, size, false);
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(1, 2, 1.5);
+    scene.add(sun);
+    const obj = await load(item);
+    obj.rotation.x = -Math.PI / 2;
+    scene.add(obj);
+    const sphere = new THREE.Box3().setFromObject(obj).getBoundingSphere(new THREE.Sphere());
+    if (!(sphere.radius > 0)) throw new Error('Empty model');
+    const camera = new THREE.PerspectiveCamera(30, 1, sphere.radius / 100, sphere.radius * 100);
+    const view = new THREE.Vector3(0.55, 0.6, 1).normalize();
+    camera.position.copy(sphere.center).addScaledVector(view, (sphere.radius * 1.05) / Math.sin((30 * Math.PI) / 360));
+    camera.lookAt(sphere.center);
+    r.render(scene, camera);
+    const blob = await new Promise((resolve) => { r.domElement.toBlob(resolve, 'image/png'); });
+    scene.traverse((c) => { c.geometry?.dispose?.(); });
+    if (!blob) throw new Error('Could not draw the model');
+    return blob;
+  } finally {
+    r.dispose();
+    r.forceContextLoss();
+  }
+}
+
+window.Preview = { open, thumbnail, supports: (name) => /\.(stl|obj|3mf)$/i.test(name) };

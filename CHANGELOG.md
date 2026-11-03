@@ -3,6 +3,15 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.19.0 — 2026-11-02
+
+### Added
+- **A picture for every file in the library.** Files without a preview now get
+  one: G-code is drawn from its toolpaths, sliced .3mf files use the picture
+  inside them, and models are drawn with the 3D preview. Existing files fill in
+  by themselves after updating.
+- **Browse printer files** shows the picture when the library has that file.
+
 ## 0.18.1 — 2026-11-02
 
 ### Fixed

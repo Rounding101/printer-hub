@@ -322,6 +322,7 @@ function showView() {
   document.querySelectorAll('.tabs a').forEach((a) => a.setAttribute('aria-current', a.dataset.view === navFor ? 'page' : 'false'));
   document.querySelectorAll('.view').forEach((el) => { el.hidden = !el.dataset.view.split(' ').includes(known); });
   if (known === 'jobs') Jobs.show(arg);
+  if (known === 'library') Files.renderLibrary();
   if (known === 'account') Account.renderAccount();
   if (known === 'users') Account.renderUsers();
   if (known === 'timelapses') Timelapses.render();

@@ -58,6 +58,8 @@ jobs:
           for i in $(seq 1 30); do curl -fsS "$HUB/api/health" && break; sleep 1; done; echo
           [ "$(code | wc -l)" = 1 ]
           echo "CODE=$(code)" >> "$GITHUB_ENV"
+      - name: The image can draw previews
+        run: docker exec printer-hub node -e "require('./slicer/thumbnail.js')"
       - name: AGENTS.md, steps 3 to 7
         run: |
           curl -fsS "$HUB/api/auth/me" | jq -e '.setup == true'

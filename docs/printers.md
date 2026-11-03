@@ -100,17 +100,21 @@ camera is `http://<ip>:8080/?action=stream`.
 **CANVAS multi-color:** when you start a print, the hub suggests a loaded tray
 for each color (same material, closest color), you can change it, and the hub
 tells the printer which trays to use. The job log charges the rolls in those
-trays. The printer doesn't report how much of each color a file uses, so a
-one-color print charges the file's total to its tray, while a multi-color print
-records its total without charging a roll unless every color uses the same tray.
-If the printer switches trays by itself mid-print (auto-refill), the charge
-stays on the tray the print started from.
+trays. The printer doesn't report how much of each color a file uses: a
+one-color print charges the file's total to its tray, and a multi-color file
+the hub sliced charges each color's grams from the hub's own copy (matched by
+filament number, which is the printer's tool number `t`). Other multi-color
+files record their total without charging a roll, unless every color uses the
+same tray. If the printer doesn't list a file's colors at all, the hub won't
+start it while CANVAS is attached, since it can't pick a tray; start it on the
+printer's screen instead. If the printer switches trays by itself mid-print
+(auto-refill), the charge stays on the tray the print started from.
 
 **Pause, resume and cancel** count as done when the printer answers or its
 status changes to match. If neither happens within 15 seconds, the hub says the
-command wasn't confirmed instead of reporting success. Pausing isn't offered
-while the printer heats up for a print: the printer holds such a pause and
-carries it out minutes later. Cancel works at any time.
+command wasn't confirmed instead of reporting success. The Pause button is
+hidden while the printer heats up for a print, because the printer holds such a
+pause and carries it out minutes later. Cancel works at any time.
 
 Uploads use the access code too; with a wrong one the printer refuses them.
 

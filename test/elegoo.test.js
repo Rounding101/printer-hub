@@ -28,7 +28,7 @@ function idleStatus() {
 async function fakeCentauri({ code = '123456', clientLimit = false, silent = [] } = {}) {
   const p = { status: idleStatus(), requests: [], uploads: [], seq: 100, clients: [], silent: new Set(silent) };
   // As a real CC2 lists them: color_map by G-code tool number, grams in total_filament_used.
-  const files = [
+  const files = p.files = [
     { filename: 'old.gcode', size: 10, create_time: 1, layer: 50, type: 'file', color_map: [{ color: '#36A8E1', name: 'PETG', t: 0 }, { color: '#FFFFFF', name: 'PLA', t: 1 }], total_filament_used: 30 },
     { filename: 'cube.gcode', size: 20, create_time: 2, layer: 120, type: 'file', color_map: [{ color: '#FF1010', name: 'PLA', t: 0 }], total_filament_used: 12.5 },
   ];
@@ -289,6 +289,56 @@ test('Elegoo CC2: CANVAS prints charge the tray they print from', async () => {
     // An empty tray is refused rather than letting the printer fall back to tray 0.
     await assert.rejects(d.startPrint('cube.gcode', { mapping: { 0: 1 } }), /loaded CANVAS tray/);
   });
+});
+
+// Second review 1: with CANVAS attached, a file whose colors aren't known isn't
+// started blind (an empty slot_map lets the printer pick any tray).
+test('Elegoo CC2: with CANVAS, a file with no known colors is refused', async () => {
+  const fake = await fakeCentauri();
+  fake.p.files.push({ filename: 'nocolors.gcode', size: 5, create_time: 0, layer: 10, type: 'file', total_filament_used: 3 });
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.slots);
+    assert.deepEqual((await d.printOptions('nocolors.gcode')).colors, []);
+    await assert.rejects(d.startPrint('nocolors.gcode'), /doesn’t report which colors nocolors\.gcode uses/);
+    await assert.rejects(d.startPrint('not-on-printer.gcode'), /doesn’t report which colors/);
+    assert.equal(fake.p.requests.filter((r) => r.method === 1020).length, 0);
+  });
+});
+
+// Second review 4: a color's index is its tool number t, which is also the
+// filament number the hub's library uses for per-color grams.
+test('Elegoo CC2: color index is the tool number t', async () => {
+  const fake = await fakeCentauri();
+  fake.p.files.push({ filename: 'second-filament.gcode', size: 5, create_time: 0, layer: 10, type: 'file', color_map: [{ color: '#FFFFFF', name: 'PLA', t: 1 }], total_filament_used: 4 });
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.slots);
+    const { colors } = await d.printOptions('second-filament.gcode');
+    assert.deepEqual(colors.map((c) => [c.index, c.slot]), [[1, 2]]);
+    await d.startPrint('second-filament.gcode');
+    assert.deepEqual(fake.p.requests.find((r) => r.method === 1020).params.config.slot_map, [{ t: 1, canvas_id: 0, tray_id: 2 }]);
+  });
+});
+
+// Second review 2: tray deltas don't pile up tray reads in the queue.
+test('Elegoo CC2: bursts of CANVAS deltas share one tray read', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.slots);
+    await new Promise((r) => setTimeout(r, 30));
+    d.gapMs = 50;
+    const reads = () => fake.p.requests.filter((r) => r.method === 2005).length;
+    const before = reads();
+    for (let i = 0; i < 10; i++) fake.p.push({ canvas_info: { active_tray_id: i % 4 } });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(reads() - before, 1);
+    assert.equal(d.slotsRead, null); // and a later delta can read again
+  });
+});
+
+// Second review 3: the dashboard hides Pause while heating for this printer.
+test('Elegoo CC2: says it can’t pause while heating', () => {
+  const d = new ElegooDriver({ id: 'x', type: 'elegoo', host: '127.0.0.1' });
+  assert.equal(d.state.capabilities.pauseWhileHeating, false);
 });
 
 test('Elegoo CC2: without a CANVAS unit nothing is mapped', async () => {

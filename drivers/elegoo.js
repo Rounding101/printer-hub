@@ -150,6 +150,7 @@ class ElegooDriver extends PrinterDriver {
     this.limits = { nozzle: 300, bed: 110, jog: 100 };
     this.state.capabilities = {
       pause: true, resume: true, cancel: true, light: true, files: true,
+      pauseWhileHeating: false, // see pause()
       control: { jog: true, home: true, motorsOff: false, temps: ['nozzle', 'bed'], fans: ['part'], speed: 'mode', limits: this.limits },
     };
   }
@@ -440,12 +441,22 @@ class ElegooDriver extends PrinterDriver {
     if (status !== 'printing' && status !== 'paused' && status !== 'pausing') this.speedMode = null;
   }
 
-  async refreshSlots() {
-    const r = await this.send(METHOD.CANVAS);
-    const slots = slotsFrom(r.canvas_info);
-    this.slots = slots.length ? slots : null;
-    this.render();
-    return this.slots;
+  // One tray read at a time: tray deltas can come often, and each queued read
+  // would hold back other requests by GAP_MS.
+  refreshSlots() {
+    if (this.slotsRead) return this.slotsRead;
+    this.slotsRead = (async () => {
+      try {
+        const r = await this.send(METHOD.CANVAS);
+        const slots = slotsFrom(r.canvas_info);
+        this.slots = slots.length ? slots : null;
+        this.render();
+        return this.slots;
+      } finally {
+        this.slotsRead = null;
+      }
+    })();
+    return this.slotsRead;
   }
 
   async pause() {
@@ -529,6 +540,11 @@ class ElegooDriver extends PrinterDriver {
   // entry is missing or out of range, so every color must map to a loaded tray.
   async startPrint(filename, { mapping } = {}) {
     const opts = await this.printOptions(filename);
+    // With CANVAS attached, an empty slot_map would print from whatever tray
+    // the printer picks, possibly the wrong color, so don't start blind.
+    if (opts.slots.length && !opts.colors.length) {
+      throw new Error(`The printer doesn’t report which colors ${filename} uses, so the hub can’t choose a CANVAS tray for it. Start it on the printer’s screen instead.`);
+    }
     const slotMap = opts.colors.map((c) => {
       const chosen = mapping && mapping[c.index] != null ? Number(mapping[c.index]) : c.slot;
       const slot = opts.slots.find((s) => s.index === chosen && s.ready);

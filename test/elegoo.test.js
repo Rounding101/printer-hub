@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
-const { ElegooDriver, mapStatus } = require('../drivers/elegoo');
+const { ElegooDriver, mapStatus, deepMerge } = require('../drivers/elegoo');
+const { planFilamentUse } = require('../lib/jobs');
 
 const SN = 'CC2SN0001';
 
@@ -23,11 +24,13 @@ function idleStatus() {
   };
 }
 
-async function fakeCentauri({ code = '123456', clientLimit = false } = {}) {
-  const p = { status: idleStatus(), requests: [], uploads: [], seq: 100, clients: [] };
+// `silent`: methods the printer never answers (and that change nothing).
+async function fakeCentauri({ code = '123456', clientLimit = false, silent = [] } = {}) {
+  const p = { status: idleStatus(), requests: [], uploads: [], seq: 100, clients: [], silent: new Set(silent) };
+  // As a real CC2 lists them: color_map by G-code tool number, grams in total_filament_used.
   const files = [
-    { filename: 'old.gcode', size: 10, create_time: 1, layer: 50 },
-    { filename: 'cube.gcode', size: 20, create_time: 2, layer: 120 },
+    { filename: 'old.gcode', size: 10, create_time: 1, layer: 50, type: 'file', color_map: [{ color: '#36A8E1', name: 'PETG', t: 0 }, { color: '#FFFFFF', name: 'PLA', t: 1 }], total_filament_used: 30 },
+    { filename: 'cube.gcode', size: 20, create_time: 2, layer: 120, type: 'file', color_map: [{ color: '#FF1010', name: 'PLA', t: 0 }], total_filament_used: 12.5 },
   ];
 
   const server = http.createServer((req, res) => {
@@ -75,10 +78,15 @@ async function fakeCentauri({ code = '123456', clientLimit = false } = {}) {
     1030: () => ({ error_code: 0 }),
     1031: () => (p.status.machine_status.status === 2 ? { error_code: 0 } : { error_code: 1010 }),
     1044: (params) => ({ error_code: 0, file_list: files.slice(params.offset, params.offset + params.limit), offset: params.offset, total: files.length }),
-    1046: (params) => ({ error_code: 0, filename: params.filename, total_layer: files.find((f) => f.filename === params.filename)?.layer || 0 }),
-    2005: () => ({ error_code: 0, canvas_info: { canvas_list: [{ canvas_id: 0, tray_list: [
+    1046: (params) => {
+      const f = files.find((x) => x.filename === params.filename);
+      return f ? { error_code: 0, filename: params.filename, total_layer: f.layer } : { error_code: 1021 };
+    },
+    // Tray status: 0 empty, 1 loaded, 2 loaded and in use.
+    2005: () => ({ error_code: 0, canvas_info: { active_canvas_id: 0, active_tray_id: 2, canvas_list: [{ canvas_id: 0, tray_list: [
       { tray_id: 0, filament_color: '#FF0000', filament_type: 'PLA', status: 1 },
       { tray_id: 1, filament_color: '#00FF00', filament_type: 'PETG', status: 0 },
+      { tray_id: 2, filament_color: '#FFFFFF', filament_type: 'PLA', status: 2 },
     ] }] } }),
   };
 
@@ -94,17 +102,19 @@ async function fakeCentauri({ code = '123456', clientLimit = false } = {}) {
     client.subscribe = (t) => { client.subs.push(...[].concat(t)); };
     client.unsubscribe = (t) => { client.subs = client.subs.filter((s) => s !== t); };
     client.end = () => { client.connected = false; p.clients = p.clients.filter((c) => c !== client); };
-    client.publish = (topic, payload) => {
+    client.publish = (topic, payload, opts = {}) => {
       const msg = JSON.parse(payload);
       if (topic === `elegoo/${SN}/api_register`) {
         const full = clientLimit && p.clients.length >= 2;
         if (!full) p.clients.push(client);
-        return client.deliver(`elegoo/${SN}/${msg.request_id}/register_response`, full ? { client_id: msg.client_id, error: 'too many clients', code: 3 } : { client_id: msg.client_id, error: 'ok' });
+        client.registerTopic = `elegoo/${SN}/${msg.request_id}/register_response`;
+        return client.deliver(client.registerTopic, full ? { client_id: msg.client_id, error: 'too many clients', code: 3 } : { client_id: msg.client_id, error: 'ok' });
       }
       const m = /^elegoo\/[^/]+\/([^/]+)\/api_request$/.exec(topic);
       if (!m) return;
       if (msg.type === 'PING') return client.deliver(`elegoo/${SN}/${m[1]}/api_response`, { type: 'PONG' });
-      p.requests.push({ method: msg.method, params: msg.params });
+      p.requests.push({ method: msg.method, params: msg.params, qos: opts.qos || 0 });
+      if (p.silent.has(msg.method)) return;
       const result = results[msg.method] ? results[msg.method](msg.params || {}) : { error_code: 1001 };
       client.deliver(`elegoo/${SN}/${m[1]}/api_response`, { id: msg.id, method: msg.method, result });
     };
@@ -128,8 +138,8 @@ function waitFor(driver, pred, ms = 3000) {
   });
 }
 
-async function withDriver(fake, cfg, fn) {
-  const d = new ElegooDriver({ id: 'cc2', name: 'CC2', type: 'elegoo', host: fake.host, ...cfg }, { connect: fake.connect, gapMs: 0, pingMs: 60000 });
+async function withDriver(fake, cfg, fn, opts = {}) {
+  const d = new ElegooDriver({ id: 'cc2', name: 'CC2', type: 'elegoo', host: fake.host, ...cfg }, { connect: fake.connect, gapMs: 0, pingMs: 60000, ...opts });
   try {
     await d.start();
     await fn(d);
@@ -154,7 +164,11 @@ test('Elegoo CC2: connects, reports status, files, prints, controls, uploads', a
     assert.equal(s.camera, 'mjpeg');
     assert.equal(d.cameraSource().url, 'http://127.0.0.1:8080/?action=stream');
     s = await waitFor(d, (x) => x.slots);
-    assert.deepEqual(s.slots, [{ index: 0, color: [255, 0, 0], type: 'PLA', ready: true }, { index: 1, color: [0, 255, 0], type: 'PETG', ready: false }]);
+    assert.deepEqual(s.slots, [
+      { index: 0, color: [255, 0, 0], type: 'PLA', ready: true },
+      { index: 1, color: [0, 255, 0], type: 'PETG', ready: false },
+      { index: 2, color: [255, 255, 255], type: 'PLA', ready: true }, // status 2: the tray in use
+    ]);
 
     // Deltas merge into the snapshot.
     fake.p.push({ extruder: { target: 220, temperature: 150 } });
@@ -164,7 +178,8 @@ test('Elegoo CC2: connects, reports status, files, prints, controls, uploads', a
     assert.deepEqual((await d.listFiles()).map((f) => f.name), ['cube.gcode', 'old.gcode']);
 
     await d.startPrint('cube.gcode');
-    assert.deepEqual(fake.p.requests.find((r) => r.method === 1020).params, { storage_media: 'local', filename: 'cube.gcode', config: { printer_check: true, slot_map: [] } });
+    // Red PLA goes to the red PLA tray, and the printer is told so.
+    assert.deepEqual(fake.p.requests.find((r) => r.method === 1020).params, { storage_media: 'local', filename: 'cube.gcode', config: { printer_check: true, slot_map: [{ t: 0, canvas_id: 0, tray_id: 0 }] } });
     fake.p.push(JSON.parse(JSON.stringify({ machine_status: fake.p.status.machine_status, print_status: fake.p.status.print_status })));
     s = await waitFor(d, (x) => x.status === 'printing');
     assert.equal(s.job.file, 'cube.gcode');
@@ -244,4 +259,140 @@ test('Elegoo CC2: status codes map to hub statuses', () => {
   assert.equal(st({ status: 14 }), 'error');
   assert.deepEqual(mapStatus({ machine_status: { status: 2, exception_status: [103] } }), { status: 'error', error: 'Nozzle heating failed' });
   assert.equal(st({ status: 2, exception_status: [1301] }), 'printing'); // warnings don't stop the print
+});
+
+// Review 1: the tray a print uses is charged, and is the tray the printer is told to use.
+test('Elegoo CC2: CANVAS prints charge the tray they print from', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.slots);
+    const one = await d.printOptions('cube.gcode');
+    assert.deepEqual(one.colors, [{ index: 0, color: [255, 16, 16], material: 'PLA', grams: 12.5, slot: 0 }]);
+    assert.deepEqual(planFilamentUse(one.colors, null, true), [{ slot: 0, grams: 12.5 }]); // what the job log charges
+
+    // A multi-color file gets a tray per color, no per-color weights. PLA goes to
+    // the closer PLA tray; with no PETG loaded, PETG goes to the closest color.
+    const two = await d.printOptions('old.gcode');
+    assert.deepEqual(two.colors.map((c) => [c.index, c.material, c.slot, c.grams]), [[0, 'PETG', 2, 0], [1, 'PLA', 2, 0]]);
+
+    // The user's choice (the tray in use counts as loaded) goes to the printer.
+    await d.startPrint('cube.gcode', { mapping: { 0: 2 } });
+    assert.deepEqual(fake.p.requests.find((r) => r.method === 1020).params.config.slot_map, [{ t: 0, canvas_id: 0, tray_id: 2 }]);
+    // An empty tray is refused rather than letting the printer fall back to tray 0.
+    await assert.rejects(d.startPrint('cube.gcode', { mapping: { 0: 1 } }), /loaded CANVAS tray/);
+  });
+});
+
+test('Elegoo CC2: without a CANVAS unit nothing is mapped', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.online);
+    d.slots = null;
+    assert.deepEqual((await d.printOptions('cube.gcode')).colors, []);
+    await d.startPrint('cube.gcode');
+    assert.deepEqual(fake.p.requests.find((r) => r.method === 1020).params.config.slot_map, []);
+  });
+});
+
+// Review 2: no throw from the ping timer, and one ping timer however often the printer answers.
+test('Elegoo CC2: ping never throws, and a repeated register_response keeps one timer', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.online && x.firmware);
+    const timer = d.pingTimer;
+    const client = fake.p.clients[0];
+    client.deliver(client.registerTopic, { client_id: d.clientId, error: 'ok' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(d.pingTimer, timer);
+    assert.equal(fake.p.requests.filter((r) => r.method === 1001).length, 1);
+
+    client.connected = false; // e.g. mid-reconnect
+    assert.doesNotThrow(() => d.ping());
+    d.client = null;
+    assert.doesNotThrow(() => d.ping());
+  });
+});
+
+// Review 3: a crafted status push can't reach Object.prototype.
+test('Elegoo CC2: status merging ignores __proto__, constructor and prototype', async () => {
+  const evil = JSON.parse('{"__proto__":{"polluted":1},"constructor":{"prototype":{"polluted":1}},"led":{"status":0}}');
+  const into = deepMerge({ led: { status: 1 } }, evil);
+  assert.equal({}.polluted, undefined);
+  assert.equal(Object.prototype.polluted, undefined);
+  assert.deepEqual(into, { led: { status: 0 } });
+
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.online);
+    for (const c of fake.p.clients) c.deliver(`elegoo/${SN}/api_status`, JSON.parse(`{"id":900,"method":6000,"result":{"__proto__":{"polluted":2},"led":{"status":0}}}`));
+    await waitFor(d, (x) => x.light === false);
+    assert.equal({}.polluted, undefined);
+  });
+});
+
+// Review 4: stop and pause jump the queue, go at QoS 1, and a silent printer is an error.
+test('Elegoo CC2: cancel skips queued requests and is not confirmed when nothing happens', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.online && x.slots);
+    d.gapMs = 150;
+    const listed = () => fake.p.requests.filter((r) => r.method === 1044).length;
+    const before = listed();
+    const queued = [d.send(1044, { offset: 0, limit: 1 }), d.send(1044, { offset: 1, limit: 1 }), d.send(1044, { offset: 2, limit: 1 })];
+    await d.cancel();
+    assert.ok(listed() - before <= 1, 'cancel waited behind queued requests');
+    assert.equal(fake.p.requests.find((r) => r.method === 1022).qos, 1);
+    await Promise.all(queued);
+  });
+
+  const printing = (fakeP) => Object.assign(fakeP.status.machine_status, { status: 2, sub_status: 2075 });
+  const mute = await fakeCentauri({ silent: [1021, 1022] });
+  printing(mute.p);
+  await withDriver(mute, {}, async (d) => {
+    await waitFor(d, (x) => x.status === 'printing' && x.slots);
+    await assert.rejects(d.cancel(), /didn’t confirm the cancel/);
+    await assert.rejects(d.pause(), /didn’t confirm the pause/);
+  }, { confirmMs: 100 });
+
+  // A printer that doesn't answer but does change state has confirmed it.
+  const late = await fakeCentauri({ silent: [1021] });
+  printing(late.p);
+  await withDriver(late, {}, async (d) => {
+    await waitFor(d, (x) => x.status === 'printing' && x.slots);
+    const p = d.pause();
+    late.p.push({ machine_status: { status: 2, sub_status: 2502 }, print_status: { filename: 'cube.gcode' } });
+    await p;
+  }, { confirmMs: 1000 });
+});
+
+// Review 5: slicing works without picking a profile first.
+test('Elegoo CC2: has a default slicer profile', () => {
+  assert.deepEqual(ElegooDriver.meta.slicer, { vendor: 'Elegoo', machine: 'Elegoo Centauri Carbon 2 0.4 nozzle' });
+});
+
+// Review (smaller): a failed layer lookup is asked once, not on every update.
+test('Elegoo CC2: a failed total-layer lookup is not retried', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.online);
+    for (let i = 0; i < 5; i++) fake.p.push({ machine_status: { status: 2, sub_status: 2075, progress: i }, print_status: { filename: 'gone.gcode', current_layer: i } });
+    await waitFor(d, (x) => x.job?.layer === 4);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(fake.p.requests.filter((r) => r.method === 1046).length, 1);
+    assert.equal(d.state.job.totalLayers, 0);
+  });
+});
+
+// Found while checking review 1: a tray delta re-reads the trays instead of shrinking the list.
+test('Elegoo CC2: a CANVAS delta refreshes the whole tray list', async () => {
+  const fake = await fakeCentauri();
+  await withDriver(fake, {}, async (d) => {
+    await waitFor(d, (x) => x.slots);
+    const before = fake.p.requests.filter((r) => r.method === 2005).length;
+    fake.p.push({ canvas_info: { canvas_list: [{ canvas_id: 0, tray_list: [{ tray_id: 1, status: 1 }] }] } });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(fake.p.requests.filter((r) => r.method === 2005).length, before + 1);
+    assert.equal(d.state.slots.length, 3);
+    assert.equal(d.status.canvas_info, undefined);
+  });
 });

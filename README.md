@@ -119,10 +119,13 @@ Your printers, accounts and history are kept.
 | **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ ¹ | ✓ | ² |
 | **FlashForge** | Adventurer 5M / 5M Pro (LAN-only mode) | ✓ | ✓ | ✓ |
 | **Anycubic** | Kobra X / Kobra 3 / S1 (LAN Mode, incl. ACE multi-color) | ✓ | ✓ | ✓ |
-| **Elegoo** | Centauri Carbon 2 (LAN Only mode, incl. CANVAS multi-color) | ✓ | ✓ | ✓ |
+| **Elegoo** | Centauri Carbon 2 (LAN Only mode, incl. CANVAS multi-color) ³ | ✓ | ✓ | ✓ |
 
 ¹ Pause, resume and cancel; PrusaLink has no manual-control API. ² Prusa
 printers have no local camera stream, but you can add any MJPEG camera URL.
+³ Status, files and the light are tested on a real printer (firmware
+02.01.01.07). Starting prints, the camera in the hub, uploads and manual control
+are tested against a simulated printer only.
 
 Slicing covers about **1,000 printer profiles from 64 brands** (everything
 OrcaSlicer ships), and generic Klipper/Marlin profiles for anything else.
@@ -158,6 +161,7 @@ type already needs:
 | Prusa | PrusaLink on, and its password | HTTP, port 80 unless you give another |
 | FlashForge | LAN-only mode on, with the serial number and check code | HTTP on port 8898; TCP on port 8899 with no check code |
 | Anycubic | LAN Mode on | HTTP on port 18910, then MQTT over TLS on port 9883 |
+| Elegoo | LAN Only Mode on, and its access code | MQTT on port 1883; HTTP on port 80 (serial number, uploads); camera on port 8080 |
 
 A firewall between the hub and a printer has to allow these ports. The drivers
 are part of the hub, in [`drivers/`](drivers).
@@ -169,7 +173,7 @@ You don't install any of this unless you run from source.
 
 | Image | Includes |
 | --- | --- |
-| `printer-hub` | Node.js 22 on Alpine, FFmpeg for timelapses, and three npm packages: [mqtt](https://www.npmjs.com/package/mqtt) for Anycubic printers, [mpegts.js](https://www.npmjs.com/package/mpegts.js) for live video, [three](https://www.npmjs.com/package/three) for the 3D preview |
+| `printer-hub` | Node.js 22 on Alpine, FFmpeg for timelapses, and three npm packages: [mqtt](https://www.npmjs.com/package/mqtt) for Anycubic and Elegoo printers, [mpegts.js](https://www.npmjs.com/package/mpegts.js) for live video, [three](https://www.npmjs.com/package/three) for the 3D preview |
 | `printer-hub-slicer` | Ubuntu 24.04, [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) 2.4.2 and the libraries it needs, and OpenCASCADE for STEP files |
 
 **Running from source without Docker** needs Node.js 22, `npm install`, and

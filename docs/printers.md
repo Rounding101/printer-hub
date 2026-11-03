@@ -91,11 +91,24 @@ fallback.
 
 On the printer, turn on **LAN Only Mode** (Settings → Network); without it the
 printer accepts the connection but never answers. Enter the **access code**
-shown on the same screen (leave it empty if none is set). The printer allows
-two LAN connections at a time, shared with the Elegoo app and slicer; if both
-are taken the hub says so and reconnects once one is free. The camera is
-`http://<ip>:8080/?action=stream`. With a CANVAS unit, the printer picks the
-trays for each color itself.
+shown on the same screen. If the printer has no access code set, leave it
+empty: the hub then uses `123456`, as Elegoo's own app and slicer do. The
+printer allows two LAN connections at a time, shared with the Elegoo app and
+slicer; if both are taken the hub says so and reconnects once one is free. The
+camera is `http://<ip>:8080/?action=stream`.
+
+**CANVAS multi-color:** when you start a print, the hub suggests a loaded tray
+for each color (same material, closest color), you can change it, and the hub
+tells the printer which trays to use. The job log charges the rolls in those
+trays. The printer doesn't report how much of each color a file uses, so a
+one-color print charges the file's total to its tray, while a multi-color print
+records its total without charging a roll unless every color uses the same tray.
+If the printer switches trays by itself mid-print (auto-refill), the charge
+stays on the tray the print started from.
+
+**Pause, resume and cancel** count as done when the printer answers or its
+status changes to match. If neither happens within 15 seconds, the hub says the
+command wasn't confirmed instead of reporting success.
 
 ### Network
 

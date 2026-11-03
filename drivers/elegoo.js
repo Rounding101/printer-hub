@@ -66,8 +66,11 @@ const GAP_MS = 2000; // 3+ requests in quick succession trigger a cooldown that 
 const CHUNK = 1024 * 1024;
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+// JSON.parse gives "__proto__" an own key; merging it would reach Object.prototype.
+const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
 function deepMerge(into, patch) {
   for (const [k, v] of Object.entries(patch || {})) {
+    if (UNSAFE.has(k)) continue;
     if (isObj(v) && isObj(into[k])) deepMerge(into[k], v);
     else into[k] = v;
   }
@@ -82,14 +85,19 @@ function rgb(hex) {
   return [n >> 16, (n >> 8) & 255, n & 255];
 }
 
+// The hub numbers slots canvas_id * 4 + tray_id (tray_id 0-3 per unit); the
+// printer takes canvas_id and tray_id separately. Tray status: 0 empty,
+// 1 loaded, 2 loaded and in use.
+const TRAYS = 4;
 function slotsFrom(canvas) {
   return (canvas?.canvas_list || []).flatMap((c) => (c.tray_list || []).map((t) => ({
-    index: (c.canvas_id || 0) * 4 + (t.tray_id || 0),
+    index: (c.canvas_id || 0) * TRAYS + (t.tray_id || 0),
     color: rgb(t.filament_color),
     type: t.filament_type || '',
-    ready: t.status === 1,
+    ready: t.status === 1 || t.status === 2,
   })));
 }
+const trayOf = (index) => ({ canvas_id: Math.floor(index / TRAYS), tray_id: index % TRAYS });
 
 // A string on older firmware; on 02.01.01.07 an object such as
 // { mcu_version: '00.00.00.00', ota_version: '02.01.01.07', soc_version: '' }.
@@ -115,9 +123,10 @@ class ElegooDriver extends PrinterDriver {
   static meta = {
     label: 'Elegoo Centauri Carbon 2 (LAN Only mode)',
     help: 'Stock firmware with LAN Only Mode on (Settings → Network). The printer allows two LAN connections at a time, so the hub uses one of them.',
+    slicer: { vendor: 'Elegoo', machine: 'Elegoo Centauri Carbon 2 0.4 nozzle' },
     fields: [
       { ...HOST_FIELD, help: 'The printer’s IP address.' },
-      { key: 'accessCode', label: 'Access code', type: 'password', help: 'Shown on the printer under Settings → Network. Leave empty if none is set.' },
+      { key: 'accessCode', label: 'Access code', type: 'password', help: 'Shown on the printer under Settings → Network. Leave empty if none is set; the hub then uses 123456, like Elegoo’s own software.' },
       { ...CAMERA_FIELD, help: 'Defaults to the printer’s camera on port 8080.' },
     ],
   };
@@ -130,6 +139,7 @@ class ElegooDriver extends PrinterDriver {
     this.connectMqtt = opts.connect || mqtt.connect; // tests pass a fake
     this.gapMs = opts.gapMs ?? GAP_MS;
     this.pingMs = opts.pingMs ?? PING_MS;
+    this.confirmMs = opts.confirmMs ?? 15000;
     this.status = {};
     this.attrs = {};
     this.slots = null;
@@ -144,6 +154,7 @@ class ElegooDriver extends PrinterDriver {
     };
   }
 
+  // Elegoo's SDK and slicer use 123456 when the printer has no access code set.
   get password() { return this.cfg.accessCode || '123456'; }
 
   async start() {
@@ -158,6 +169,7 @@ class ElegooDriver extends PrinterDriver {
   }
 
   teardown() {
+    this.registered = false;
     clearInterval(this.pingTimer);
     clearTimeout(this.snTimer);
     clearTimeout(this.registerTimer);
@@ -251,15 +263,11 @@ class ElegooDriver extends PrinterDriver {
 
   async onRegistered() {
     clearTimeout(this.registerTimer);
-    let missed = 0;
-    this.pingTimer = setInterval(() => {
-      if (missed >= 2) return this.retry(new Error('The printer stopped answering'));
-      missed++;
-      this.pong = () => { missed = 0; };
-      this.publishRequest({ type: 'PING' });
-      // A full snapshot now and then guards against missed deltas.
-      this.send(METHOD.STATUS).then((r) => this.applyFull(r)).catch(() => {});
-    }, this.pingMs);
+    if (this.registered) return; // a repeated register_response
+    this.registered = true;
+    clearInterval(this.pingTimer);
+    this.missed = 0;
+    this.pingTimer = setInterval(() => this.ping(), this.pingMs);
     try {
       this.attrs = await this.send(METHOD.ATTRIBUTES);
       this.applyFull(await this.send(METHOD.STATUS));
@@ -269,30 +277,58 @@ class ElegooDriver extends PrinterDriver {
     }
   }
 
-  publishRequest(body) {
+  // Runs from a timer, so it must never throw: an uncaught error would stop the hub.
+  ping() {
+    if (this.missed >= 2) return this.retry(new Error('The printer stopped answering'));
+    this.missed++;
+    try { this.publishRequest({ type: 'PING' }); } catch { return; }
+    // A full snapshot now and then guards against missed deltas; trays change
+    // during multi-color prints.
+    this.send(METHOD.STATUS).then((r) => this.applyFull(r)).catch(() => {});
+    if (this.slots && ['printing', 'paused'].includes(this.state.status)) this.refreshSlots().catch(() => {});
+  }
+
+  publishRequest(body, qos = 0) {
     if (!this.client?.connected) throw new Error('Printer not connected');
-    this.client.publish(`elegoo/${this.sn}/${this.clientId}/api_request`, JSON.stringify(body));
+    this.client.publish(`elegoo/${this.sn}/${this.clientId}/api_request`, JSON.stringify(body), { qos });
   }
 
   // Sends a request and resolves with its result. Requests are spaced out
-  // (see GAP_MS). With `lenient`, a printer that doesn't answer in time counts
-  // as accepted: pause/resume/stop are only answered once they're done, which
-  // can take minutes.
-  send(method, params = {}, { timeoutMs = 10000, lenient = false } = {}) {
+  // (see GAP_MS); `urgent` ones (stop, pause...) skip the line and go at QoS 1.
+  send(method, params = {}, { timeoutMs = 10000, urgent = false } = {}) {
     const run = () => new Promise((resolve, reject) => {
       const id = this.nextId++;
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        if (lenient) resolve({});
-        else reject(new Error('Printer did not respond'));
-      }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Printer did not respond')); }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, method });
-      try { this.publishRequest({ id, method, params }); } catch (err) { clearTimeout(timer); this.pending.delete(id); reject(err); }
+      try { this.publishRequest({ id, method, params }, urgent ? 1 : 0); } catch (err) { clearTimeout(timer); this.pending.delete(id); reject(err); }
     });
+    if (urgent) return run();
     const p = this.queue.then(run);
     // The next request waits for this one to be sent plus the gap, not for its answer.
     this.queue = this.queue.then(() => new Promise((r) => setTimeout(r, this.gapMs)));
     return p;
+  }
+
+  // A command that changes what the printer is doing. The printer only answers
+  // pause/resume/stop once they've finished, so either its answer or a status
+  // matching `done` counts as confirmation; neither within confirmMs is an error,
+  // never a silent success. A refusal fails at once.
+  command(method, params, done, what, { confirmMs = this.confirmMs } = {}) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, v) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.off('update', onUpdate);
+        fn(v);
+      };
+      const onUpdate = (s) => { if (done(s)) finish(resolve); };
+      const timer = setTimeout(() => finish(reject, new Error(`The printer didn’t confirm the ${what}. Check the printer.`)), confirmMs);
+      this.on('update', onUpdate);
+      this.send(method, params, { urgent: true, timeoutMs: confirmMs + 1000 })
+        .then(() => finish(resolve), (err) => { if (!/did not respond/.test(err.message)) finish(reject, err); });
+    });
   }
 
   onMessage(topic, payload) {
@@ -309,7 +345,7 @@ class ElegooDriver extends PrinterDriver {
       const full = msg.code === 3 || /too many/i.test(String(msg.error));
       return this.retry(new Error(full ? 'The printer already has two LAN connections (Elegoo app or slicer). Close one, and the hub reconnects.' : `Printer refused the connection: ${msg.error}`), 30000);
     }
-    if (msg.type === 'PONG') { this.pong?.(); return; }
+    if (msg.type === 'PONG') { this.missed = 0; return; }
     if (msg.method === METHOD.PUSH_STATUS) return this.applyDelta(msg.result || msg.params || {}, msg.id);
     if (msg.method === METHOD.PUSH_ATTRIBUTES) { this.attrs = { ...this.attrs, ...(msg.result || {}) }; return this.render(); }
     const p = this.pending.get(msg.id);
@@ -334,17 +370,25 @@ class ElegooDriver extends PrinterDriver {
       this.send(METHOD.STATUS).then((r) => this.applyFull(r)).catch(() => {});
     }
     if (seq != null) this.lastSeq = seq;
+    // A tray delta would replace the whole tray list with the one that changed,
+    // so read the trays again instead of merging it.
+    if (isObj(delta) && 'canvas_info' in delta) {
+      const { canvas_info: _, ...rest } = delta;
+      delta = rest;
+      this.refreshSlots().catch(() => {});
+    }
     deepMerge(this.status, delta); // arrays (exception_status) are replaced whole
     this.render();
   }
 
-  // Total layers aren't in the status; the file detail has them.
+  // Total layers aren't in the status; the file detail has them. Asked once per
+  // file: a failed lookup stays at 0 rather than retrying all print long.
   layersFor(file) {
     if (!file || this.totalLayers.has(file)) return this.totalLayers.get(file) || 0;
     this.totalLayers.set(file, 0);
     this.send(METHOD.FILE_DETAIL, { storage_media: 'local', filename: file })
       .then((r) => { this.totalLayers.set(file, r.total_layer || r.layer || 0); this.render(); })
-      .catch(() => this.totalLayers.delete(file));
+      .catch(() => {});
     return 0;
   }
 
@@ -404,9 +448,9 @@ class ElegooDriver extends PrinterDriver {
     return this.slots;
   }
 
-  async pause() { await this.send(METHOD.PAUSE, {}, { lenient: true }); }
-  async resume() { await this.send(METHOD.RESUME, {}, { lenient: true }); }
-  async cancel() { await this.send(METHOD.STOP, {}, { lenient: true }); }
+  async pause() { await this.command(METHOD.PAUSE, {}, (s) => ['pausing', 'paused'].includes(s.status), 'pause'); }
+  async resume() { await this.command(METHOD.RESUME, {}, (s) => ['printing', 'heating'].includes(s.status), 'resume'); }
+  async cancel() { await this.command(METHOD.STOP, {}, (s) => ['cancelling', 'idle'].includes(s.status), 'cancel'); }
 
   async setLight(on) {
     await this.send(METHOD.LIGHT, { power: on ? 1 : 0 });
@@ -418,7 +462,7 @@ class ElegooDriver extends PrinterDriver {
     const cmd = this.validateControl(raw);
     switch (cmd.action) {
       case 'jog': return this.send(METHOD.MOVE, { axes: cmd.axis, distance: cmd.distance });
-      case 'home': return this.send(METHOD.HOME, { homed_axes: cmd.axes }, { timeoutMs: 90000, lenient: true });
+      case 'home': return this.command(METHOD.HOME, { homed_axes: cmd.axes }, (s) => s.status === 'busy', 'homing');
       case 'temp': return this.send(METHOD.TEMP, cmd.heater === 'nozzle' ? { extruder: cmd.target } : { heater_bed: cmd.target });
       case 'fan': return this.send(METHOD.FAN, { fan: Math.round((cmd.pct / 100) * 255) });
       case 'speed': {
@@ -442,24 +486,56 @@ class ElegooDriver extends PrinterDriver {
       offset += (r.file_list || []).length;
       if (!r.file_list?.length || offset >= (r.total ?? 0)) break;
     }
+    this.fileRecords = new Map(files.map((f) => [f.filename, f]));
     return files
       .sort((a, b) => (b.create_time || 0) - (a.create_time || 0))
       .map((f) => ({ name: f.filename, size: f.size || null }));
   }
 
-  async printOptions() {
-    // The printer maps colors to CANVAS trays itself when given no slot map.
-    return { colors: [], slots: this.slots || [], options: [] };
+  async fileRecord(filename) {
+    if (!this.fileRecords?.has(filename)) await this.listFiles();
+    return this.fileRecords.get(filename) || null;
   }
 
-  async startPrint(filename) {
-    // printer_check persists to the next job that omits it, so always send it;
-    // an empty slot_map lets the printer pick the trays.
-    await this.send(METHOD.START, {
+  // Colors a file uses (its color_map, by G-code tool number "t") and the
+  // CANVAS tray suggested for each: same material, closest color. Per-color
+  // weights aren't reported, so a one-color file gets the file's total grams
+  // and a multi-color one none (the job log then can't split the total).
+  // Without a CANVAS unit there's nothing to map.
+  async printOptions(filename) {
+    const slots = this.slots || [];
+    if (!slots.length) return { colors: [], slots: [], options: [] };
+    const rec = await this.fileRecord(filename);
+    const map = rec?.color_map || [];
+    const ready = slots.filter((s) => s.ready);
+    const base = (t) => String(t || '').split(/\s+/)[0].toUpperCase();
+    const dist = (a, b) => a.reduce((n, v, i) => n + (v - (b[i] ?? 0)) ** 2, 0);
+    const colors = map.map((c) => {
+      const color = rgb(c.color);
+      const same = ready.filter((s) => base(s.type) === base(c.name));
+      const best = (same.length ? same : ready).slice().sort((a, b) => dist(a.color, color) - dist(b.color, color))[0];
+      return { index: c.t ?? 0, color, material: c.name || '', grams: map.length === 1 ? rec.total_filament_used || 0 : 0, slot: best ? best.index : null };
+    });
+    return { colors, slots, options: [] };
+  }
+
+  // The hub sends its own tray choice as slot_map, so the roll it charges is
+  // the one the printer feeds from. The printer prints from tray 0 when an
+  // entry is missing or out of range, so every color must map to a loaded tray.
+  async startPrint(filename, { mapping } = {}) {
+    const opts = await this.printOptions(filename);
+    const slotMap = opts.colors.map((c) => {
+      const chosen = mapping && mapping[c.index] != null ? Number(mapping[c.index]) : c.slot;
+      const slot = opts.slots.find((s) => s.index === chosen && s.ready);
+      if (!slot) throw new Error(`Pick a loaded CANVAS tray for color ${c.index + 1}`);
+      return { t: c.index, ...trayOf(slot.index) };
+    });
+    // printer_check persists to the next job that omits it, so always send it.
+    await this.command(METHOD.START, {
       storage_media: 'local',
       filename,
-      config: { printer_check: true, slot_map: [] },
-    }, { timeoutMs: 20000, lenient: true });
+      config: { printer_check: true, slot_map: slotMap },
+    }, (s) => !['idle', 'completed', 'offline', 'error'].includes(s.status), 'print start', { confirmMs: Math.max(this.confirmMs, 20000) });
   }
 
   // Raw body in 1 MiB chunks over one kept-alive connection. Chunks aren't
@@ -486,6 +562,7 @@ class ElegooDriver extends PrinterDriver {
       if (!res.ok || body.error_code) throw new Error(`Printer rejected the upload (${body.error_code ? `error ${body.error_code}` : `HTTP ${res.status}`})`);
       if (end >= data.length) break;
     }
+    this.fileRecords = null; // list again on next use
   }
 
   cameraUrl() {
@@ -499,4 +576,4 @@ class ElegooDriver extends PrinterDriver {
   }
 }
 
-module.exports = { ElegooDriver, mapStatus, slotsFrom };
+module.exports = { ElegooDriver, mapStatus, slotsFrom, deepMerge };

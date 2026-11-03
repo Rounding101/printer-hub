@@ -119,6 +119,7 @@ Your printers, accounts and history are kept.
 | **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ ¹ | ✓ | ² |
 | **FlashForge** | Adventurer 5M / 5M Pro (LAN-only mode) | ✓ | ✓ | ✓ |
 | **Anycubic** | Kobra X / Kobra 3 / S1 (LAN Mode, incl. ACE multi-color) | ✓ | ✓ | ✓ |
+| **Elegoo** | Centauri Carbon 2 (LAN Only mode, incl. CANVAS multi-color) | ✓ | ✓ | ✓ |
 
 ¹ Pause, resume and cancel; PrusaLink has no manual-control API. ² Prusa
 printers have no local camera stream, but you can add any MJPEG camera URL.
@@ -129,8 +130,8 @@ OrcaSlicer ships), and generic Klipper/Marlin profiles for anything else.
 
 > **Tested how?** FlashForge and Anycubic printers run on it daily. The
 > Klipper, OctoPrint and PrusaLink drivers follow those projects' published
-> APIs and are tested against simulated printers, but not yet on every real
-> model. Tried it on yours? Please
+> APIs, and the Elegoo driver the community's reverse-engineered protocol; they
+> are tested against simulated printers, but not yet on every real model. Tried it on yours? Please
 > [say how it went](https://github.com/Shawman511/printer-hub/issues/new/choose).
 > Bambu Lab support isn't there yet.
 

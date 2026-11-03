@@ -11,16 +11,18 @@
 | **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ | pause / resume / cancel | ✓ | stream URL only |
 | **FlashForge Adventurer 5M / 5M Pro** | Stock firmware, LAN-only mode | ✓ | ✓ | ✓ | ✓ |
 | **Anycubic Kobra X / Kobra 3 / S1** | Stock firmware, LAN Mode (incl. ACE multi-color) | ✓ | ✓ | ✓ | ✓ |
+| **Elegoo Centauri Carbon 2** | Stock firmware, LAN Only mode (incl. CANVAS multi-color) | ✓ | ✓ | ✓ | ✓ |
 | **Simulator** | A pretend printer for trying the hub | ✓ | ✓ | ✓ | ✓ |
 
 The FlashForge and Anycubic drivers are used daily on real printers. The
 Klipper, OctoPrint and PrusaLink drivers follow those projects' documented
-APIs and are tested against simulated servers in [`test/`](../test/), but haven't
-been run against every model. If something doesn't work with yours, please
-[open an issue](https://github.com/Shawman511/printer-hub/issues).
+APIs, and the Elegoo driver follows the community's reverse-engineered
+protocol. They are tested against simulated servers in [`test/`](../test/), but
+haven't been run against every model. If something doesn't work with yours,
+please [open an issue](https://github.com/Shawman511/printer-hub/issues).
 
-Not supported yet: Bambu Lab, Elegoo Centauri (SDCP) and Creality printers on
-stock (non-Klipper) firmware. Adding a printer type is one file in
+Not supported yet: Bambu Lab, the original Elegoo Centauri Carbon (SDCP) and
+Creality printers on stock (non-Klipper) firmware. Adding a printer type is one file in
 [`drivers/`](../drivers/); see [Development](development.md#how-it-works).
 
 ## Adding a printer
@@ -84,6 +86,16 @@ printer. In cloud mode the hub reports "Printer is in cloud mode". The Kobra X
 only has WiFi; once LAN Mode is on you can block its internet access in your
 router. The camera is the printer's FLV stream, with still snapshots as a
 fallback.
+
+### Elegoo Centauri Carbon 2
+
+On the printer, turn on **LAN Only Mode** (Settings → Network); without it the
+printer accepts the connection but never answers. Enter the **access code**
+shown on the same screen (leave it empty if none is set). The printer allows
+two LAN connections at a time, shared with the Elegoo app and slicer; if both
+are taken the hub says so and reconnects once one is free. The camera is
+`http://<ip>:8080/?action=stream`. With a CANVAS unit, the printer picks the
+trays for each color itself.
 
 ### Network
 

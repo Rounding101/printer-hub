@@ -46,6 +46,10 @@ jobs:
           cd "$RUNNER_TEMP/hub"
           docker compose up -d
           for i in $(seq 1 30); do curl -fsS "$HUB/api/health" && break; sleep 1; done; echo
+      - name: HUB_VOLUME keeps the data of a stack moved from source
+        run: |
+          cd "$RUNNER_TEMP/hub"
+          HUB_VOLUME=my-old-stack_printer-hub-data docker compose config | grep -q 'name: my-old-stack_printer-hub-data'
       - name: Image sizes, for the disk space in the docs
         run: |
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'

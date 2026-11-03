@@ -28,14 +28,14 @@ Printer Hub connects straight to your **Klipper**, **OctoPrint**, **Prusa**,
 **FlashForge** and **Anycubic** printers over your home network and puts them
 on one page you can open from any browser or phone.
 
-- 📺 **Live status and cameras:** progress, layers, time left, temperatures, and what a printer is getting ready to print. Crop each camera to just the build plate
-- 🎛️ **Full control:** pause, resume, cancel, jog, home, temperatures, fans, speed and lights
-- 🧊 **Built-in slicer:** drop in an STL, 3MF or STEP file, slice it with OrcaSlicer's profile for your printer, and print. Sliced files carry a preview picture that shows on the printer's own screen
-- 📚 **File library:** keep your G-code in one place, organized with folders and tags, and send it to any printer; files sliced for another printer are blocked
-- 🧵 **Filament tracking:** how much is left on each roll, from what each print used
-- 🎞️ **Timelapses:** every print recorded from the camera as a short video, cropped to the build plate. Klipper and OctoPrint printers' own timelapses show up too
-- 📈 **Job log:** every print recorded automatically, which printer made it, totals per item and CSV export
-- 👥 **Accounts:** admin, operator and watch-only viewer roles
+- **Live status and cameras:** progress, layers, time left, temperatures, and what a printer is getting ready to print. Crop each camera to just the build plate
+- **Full control:** pause, resume, cancel, jog, home, temperatures, fans, speed and lights
+- **Built-in slicer:** drop in an STL, 3MF or STEP file, slice it with OrcaSlicer's profile for your printer, and print. Sliced files carry a preview picture that shows on the printer's own screen
+- **File library:** keep your G-code in one place, organized with folders and tags, and send it to any printer; files sliced for another printer are blocked
+- **Filament tracking:** how much is left on each roll, from what each print used
+- **Timelapses:** every print recorded from the camera as a short video, cropped to the build plate. Klipper and OctoPrint printers' own timelapses show up too
+- **Job log:** every print recorded automatically, which printer made it, totals per item and CSV export
+- **Accounts:** admin, operator and watch-only viewer roles
 
 ## Install in one minute
 
@@ -114,11 +114,11 @@ Your printers, accounts and history are kept.
 
 | Add it as | Works with | Live status & control | Start prints | Camera |
 | --- | --- | :---: | :---: | :---: |
-| **Klipper (Moonraker)** | Voron, Creality K1 / Sonic Pad, Elegoo Neptune 4, Sovol, Qidi, RatRig and other Klipper printers | ✅ | ✅ | ✅ |
-| **OctoPrint** | Any printer running through OctoPrint / OctoPi: Creality Ender, Prusa MK3, most Marlin printers | ✅ | ✅ | ✅ |
-| **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✅ ¹ | ✅ | ² |
-| **FlashForge** | Adventurer 5M / 5M Pro (LAN-only mode) | ✅ | ✅ | ✅ |
-| **Anycubic** | Kobra X / Kobra 3 / S1 (LAN Mode, incl. ACE multi-color) | ✅ | ✅ | ✅ |
+| **Klipper (Moonraker)** | Voron, Creality K1 / Sonic Pad, Elegoo Neptune 4, Sovol, Qidi, RatRig and other Klipper printers | ✓ | ✓ | ✓ |
+| **OctoPrint** | Any printer running through OctoPrint / OctoPi: Creality Ender, Prusa MK3, most Marlin printers | ✓ | ✓ | ✓ |
+| **Prusa (PrusaLink)** | Prusa MK4/S, MK3.9, XL, MINI+, Core One | ✓ ¹ | ✓ | ² |
+| **FlashForge** | Adventurer 5M / 5M Pro (LAN-only mode) | ✓ | ✓ | ✓ |
+| **Anycubic** | Kobra X / Kobra 3 / S1 (LAN Mode, incl. ACE multi-color) | ✓ | ✓ | ✓ |
 
 ¹ Pause, resume and cancel; PrusaLink has no manual-control API. ² Prusa
 printers have no local camera stream, but you can add any MJPEG camera URL.
@@ -133,6 +133,48 @@ OrcaSlicer ships), and generic Klipper/Marlin profiles for anything else.
 > model. Tried it on yours? Please
 > [say how it went](https://github.com/Shawman511/printer-hub/issues/new/choose).
 > Bambu Lab support isn't there yet.
+
+## Requirements
+
+**To run it, you only need Docker.** You don't install any drivers on your
+computer: there's no USB or serial connection, and everything talks to the
+printers over your network. The Docker images already contain everything else.
+
+| You need | Details |
+| --- | --- |
+| [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin | Docker Desktop on Windows or macOS |
+| 1 GB of RAM and about 5 GB of free disk | The images take 1.6 GB; the rest is for print files and timelapses |
+| x86-64 or 64-bit ARM | Slicing needs x86-64. On ARM everything else works |
+| A network route to each printer | Same network, with a fixed address for each printer |
+
+**On each printer.** Nothing gets installed on the printer, apart from what its
+type already needs:
+
+| Printer type | Set up on the printer | How the hub connects |
+| --- | --- | --- |
+| Klipper | Moonraker running, which most Klipper setups already have | HTTP, port 7125 |
+| OctoPrint | OctoPrint running, and an API key | HTTP, port 80 unless you give another |
+| Prusa | PrusaLink on, and its password | HTTP, port 80 unless you give another |
+| FlashForge | LAN-only mode on, with the serial number and check code | HTTP on port 8898; TCP on port 8899 with no check code |
+| Anycubic | LAN Mode on | HTTP on port 18910, then MQTT over TLS on port 9883 |
+
+A firewall between the hub and a printer has to allow these ports. The drivers
+are part of the hub, in [`drivers/`](drivers).
+
+<details>
+<summary><strong>What's inside the images</strong></summary>
+
+You don't install any of this unless you run from source.
+
+| Image | Includes |
+| --- | --- |
+| `printer-hub` | Node.js 22 on Alpine, FFmpeg for timelapses, and three npm packages: [mqtt](https://www.npmjs.com/package/mqtt) for Anycubic printers, [mpegts.js](https://www.npmjs.com/package/mpegts.js) for live video, [three](https://www.npmjs.com/package/three) for the 3D preview |
+| `printer-hub-slicer` | Ubuntu 24.04, [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) 2.4.2 and the libraries it needs, and OpenCASCADE for STEP files |
+
+**Running from source without Docker** needs Node.js 22, `npm install`, and
+FFmpeg for timelapses. Slicing needs OrcaSlicer as well. See the
+[development guide](docs/development.md).
+</details>
 
 ## Screenshots
 

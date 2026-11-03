@@ -14,11 +14,11 @@ function css(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 }
 
-async function load(item) {
+async function load(item, color = css('--accent')) {
   const url = `/api/library/${encodeURIComponent(item.id)}/download`;
   const ext = item.name.split('.').pop().toLowerCase();
   const buf = await (await fetch(url)).arrayBuffer();
-  const material = new THREE.MeshStandardMaterial({ color: css('--accent'), roughness: 0.55, metalness: 0.05 });
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
   if (ext === 'stl') {
     // Many exported STLs carry zeroed facet normals; recompute them.
     const geom = new STLLoader().parse(buf);
@@ -101,7 +101,8 @@ async function thumbnail(item) {
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(1, 2, 1.5);
     scene.add(sun);
-    const obj = await load(item);
+    // A plain grey, as this picture is kept and shown under every theme.
+    const obj = await load(item, '#b4b8bf');
     obj.rotation.x = -Math.PI / 2;
     scene.add(obj);
     const sphere = new THREE.Box3().setFromObject(obj).getBoundingSphere(new THREE.Sphere());

@@ -3,6 +3,21 @@
 What changed in each version. The running version is shown under the name in
 the app's top bar.
 
+## 0.20.0 — 2026-11-02
+
+### Added
+- **Themes,** on the Account page: Graphite, Paper, Blueprint, Terminal and
+  Original, or match your device. Saved per browser.
+- **Update alerts in Dockhand,** using the published images. The installation
+  guide has the steps. The published compose file can reuse an existing volume
+  with `HUB_VOLUME`.
+- **Requirements in the README:** what to install, what to set up on each printer
+  and which ports it uses, and what the images contain. No drivers are needed.
+
+### Changed
+- **New default look and logo.** Plainer, with squarer corners and no orange. The
+  old look is the Original theme.
+
 ## 0.19.0 — 2026-11-02
 
 ### Added

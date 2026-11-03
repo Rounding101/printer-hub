@@ -69,7 +69,7 @@ file next to the compose file:
 ```bash
 HUB_PORT=3000          # port on this machine
 TZ=Europe/London       # your time zone, for the job log
-HUB_VERSION=0.19.0     # pin a release instead of "latest" (optional)
+HUB_VERSION=0.20.0     # pin a release instead of "latest" (optional)
 ```
 
 ## Option 3: one `docker run` (no slicer)
@@ -120,6 +120,28 @@ stack at this repository and its root [`compose.yaml`](../compose.yaml). The
 first build takes about 3 minutes on a fast machine. Its volume name starts with the stack's name,
 so the backup commands below work on it unchanged, but `docker volume rm` needs
 the name from `docker volume ls`.
+
+### Update alerts in Dockhand
+
+Dockhand spots an update by comparing the image a container runs with the one in
+its registry, so it needs the published images. A stack that builds from source
+runs a local image, and Dockhand can't check that one.
+
+1. Create a Git stack from this repository with the compose file path
+   `deploy/docker-compose.yml`, and leave **Build images on deploy** off.
+   **Check for updates** on the Compose stacks page then flags a new release.
+2. To check on a schedule, turn it on in **Settings → Environments → (edit) →
+   Updates**. It can notify you or update by itself.
+3. Apply an update by redeploying the stack with **Re-pull images** on, or from
+   the update arrow.
+
+Already running a stack that builds from source? Change that stack's compose file
+path and turn the build off. **Before you redeploy,** set these stack environment
+variables, or the hub starts empty on a new volume:
+
+- `HUB_VOLUME`: the name of your current volume, from `docker volume ls` or
+  Dockhand's Volumes page. It's usually `<stack name>_printer-hub-data`.
+- `HUB_PORT`: the port you use now, if it isn't 3000.
 
 ## Raspberry Pi and other ARM machines
 

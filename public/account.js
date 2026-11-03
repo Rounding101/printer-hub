@@ -191,3 +191,21 @@ const Account = (() => {
     get user() { return me; },
   };
 })();
+
+// Theme picker on the Account page.
+document.addEventListener('DOMContentLoaded', () => {
+  const grid = document.getElementById('theme-grid');
+  if (!grid) return;
+  const paint = () => grid.querySelectorAll('.theme-card').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.id === Theme.get())));
+  grid.replaceChildren(...Theme.list.map((t) => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'theme-card' });
+    b.dataset.id = t.id;
+    b.setAttribute('role', 'radio');
+    const swatch = Object.assign(document.createElement('span'), { className: 'theme-swatch' });
+    swatch.append(...t.colors.map((c) => { const s = document.createElement('span'); s.style.background = c; return s; }));
+    b.append(swatch, document.createTextNode(t.name));
+    b.onclick = () => { Theme.set(t.id); paint(); };
+    return b;
+  }));
+  paint();
+});

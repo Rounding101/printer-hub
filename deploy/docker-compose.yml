@@ -2,11 +2,15 @@
 #   docker compose up -d
 # and open http://<this machine>:3000. The first-run setup code is in the log:
 #   docker logs printer-hub 2>&1 | grep "setup code" | tail -n 1
+# Moving from a stack that built from source? Set HUB_VOLUME to its volume's name
+# (see docker volume ls) to keep your data.
 services:
   printer-hub:
     image: ghcr.io/shawman511/printer-hub:${HUB_VERSION:-latest}
     container_name: printer-hub
     restart: unless-stopped
+    labels:
+      dockhand.changelog.url: https://github.com/Shawman511/printer-hub/blob/main/CHANGELOG.md
     ports:
       - "${HUB_PORT:-3000}:3000"
     environment:
@@ -21,6 +25,8 @@ services:
     image: ghcr.io/shawman511/printer-hub-slicer:${HUB_VERSION:-latest}
     container_name: printer-hub-slicer
     restart: unless-stopped
+    labels:
+      dockhand.changelog.url: https://github.com/Shawman511/printer-hub/blob/main/CHANGELOG.md
     environment:
       TZ: ${TZ:-UTC}
     volumes:
@@ -28,4 +34,4 @@ services:
 
 volumes:
   printer-hub-data:
-    name: printer-hub-data
+    name: ${HUB_VOLUME:-printer-hub-data}

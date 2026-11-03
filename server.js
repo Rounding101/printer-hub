@@ -471,6 +471,7 @@ const STATIC = {
   '/preview.js': ['public/preview.js', 'text/javascript; charset=utf-8'],
   '/control.js': ['public/control.js', 'text/javascript; charset=utf-8'],
   '/account.js': ['public/account.js', 'text/javascript; charset=utf-8'],
+  '/theme.js': ['public/theme.js', 'text/javascript; charset=utf-8'],
   '/setup.js': ['public/setup.js', 'text/javascript; charset=utf-8'],
   '/timelapses.js': ['public/timelapses.js', 'text/javascript; charset=utf-8'],
   '/login': ['public/login.html', 'text/html; charset=utf-8'],

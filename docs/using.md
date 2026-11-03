@@ -2,7 +2,13 @@
 
 [← Back to the README](../README.md)
 
-A tour of each part of the app: the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing), [timelapses](#timelapses) and the [job log](#job-log).
+A tour of each part of the app: [themes](#themes), the [control panel](#control-panel), [filament rolls](#filament-rolls), the [library and starting prints](#files-library-uploads-and-starting-prints), [slicing](#models-and-slicing), [timelapses](#timelapses) and the [job log](#job-log).
+
+## Themes
+
+Pick one under your name in the top right, on the **Account** page: Graphite,
+Paper, Blueprint, Terminal or Original, or **Match device** to follow your light or
+dark setting. It's saved in that browser, so each device can have its own.
 
 ## Control panel
 

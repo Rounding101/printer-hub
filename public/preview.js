@@ -59,8 +59,17 @@ async function open(item) {
   let obj;
   try {
     obj = await load(item);
-  } catch (err) {
-    msg.textContent = err.message;
+  } catch {
+    // Slicer projects can keep their models in sub-files the 3D loader can't read.
+    // They come with a picture of the plate, so show that instead.
+    if (item.thumb) {
+      dlg.close();
+      Files.showImage(item);
+      return;
+    }
+    cancelAnimationFrame(frame);
+    renderer.clear();
+    msg.textContent = 'This file can’t be shown in 3D. It can still be sliced.';
     return;
   }
   // Slicers use Z-up; three.js is Y-up.

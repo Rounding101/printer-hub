@@ -422,7 +422,7 @@ select.small { padding: 4px 8px; font-size: 13px; max-width: 150px; }
 .link-btn { color: var(--accent); cursor: pointer; text-decoration: underline; }
 .table .lib-item { max-width: 420px; }
 .btn.icon { padding: 4px 8px; min-width: 30px; justify-content: center; }
-#lib-body .row-actions { flex-wrap: wrap; justify-content: flex-end; }
+:is(#lib-body, #model-body) .row-actions { flex-wrap: wrap; justify-content: flex-end; }
 .lib-name, .lib-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .lib-text { min-width: 0; }

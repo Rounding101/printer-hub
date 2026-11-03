@@ -953,5 +953,5 @@ const Files = (() => {
   function setLibrary(items) { library = items; renderLibrary(); }
   function setFolders(list) { folders = list; renderLibrary(); }
 
-  return { openPrinterFiles, openPrint, setLibrary, setFolders, renderLibrary, uploadToPrinter };
+  return { openPrinterFiles, openPrint, setLibrary, setFolders, renderLibrary, uploadToPrinter, showImage };
 })();

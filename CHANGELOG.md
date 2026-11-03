@@ -19,6 +19,10 @@ the app's top bar.
 - **Filament is charged per color** for files the hub sliced.
 - **Clicking a file:** the picture opens a preview, and the name starts Print or Slice.
 
+### Known limits
+- Project files that keep their models in sub-files have no 3D preview, so their
+  picture opens the saved plate image instead.
+
 ## 0.20.0 — 2026-11-02
 
 ### Added

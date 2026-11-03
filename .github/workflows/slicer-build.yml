@@ -41,11 +41,6 @@ jobs:
           body=$(jq -n --argjson p "$prof" '{input:"/data/models/project.3mf", vendor:"Anycubic", machine:"Anycubic Kobra X 0.4 nozzle", process:$p.defaults.process, filament:$p.defaults.filament, paintInfo:true}')
           res=$(curl -s -X POST localhost:8080/slice -d "$body"); echo "$res"
           echo "$res" | jq -e '.stats.layers > 10'
-          # The published image from before this fix, for comparison. Expected to fail.
-          docker run -d --name old-slicer -v "$PWD/data:/data" -p 8081:8080 ghcr.io/shawman511/printer-hub-slicer:0.20.0
-          for i in $(seq 1 30); do curl -sf localhost:8081/health >/dev/null && break; sleep 1; done
-          echo "0.20.0: $(curl -s -X POST localhost:8081/slice -d "$body")"
-          docker rm -f old-slicer
       - name: Any printer - profile list, shared filament library, plate choice
         run: |
           curl -sf localhost:8080/machines | jq -e 'length > 50 and (map(.vendor) | index("Custom") != null)'
